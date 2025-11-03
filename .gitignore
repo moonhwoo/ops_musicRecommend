@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Virtual env
+venv/
+.env/
+ops_v/
+
+# VS Code
+.vscode/
+
+# Logs & caches
+*.log
+gradio_cached_examples/
+.cache/
+
+# OS
+.DS_Store
+Thumbs.db
