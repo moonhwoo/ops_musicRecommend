@@ -62,17 +62,19 @@ def analyze_text(text: str):
     scores = res["scores"]
     # (label, score) 리스트로 묶고 정렬(내림차순)
     ranked = sorted(zip(labels, scores), key=lambda x: x[1], reverse=True)
-    top1 = ranked[0]
+    #ranked 구성 =>(label, score)로 이루어진 리스트
+    top1 = ranked[0] #상위1의(label, score)
     top2 = ranked[1] if len(ranked) > 1 else None
 
     # Gradio Label 출력을 위해 dict 구성 (상위 1개 위주로 표시)
-    mood_dict = {top1[0]: float(top1[1])}
+    mood_dict = {top1[0]: float(top1[1])} #상위1의 (label: score)형태로 딕셔너리 생성
     if top2 and top2[1] > 0.2:
         # 0.2 이상이면 참고용으로 함께 보여주고 싶다면 추가
         mood_dict[top2[0]] = float(top2[1])
 
     # 키워드 추출 (한국어 임베딩 기반, 1~2그램, 상위 6개)
-    keywords = [k for k, _ in kw.extract_keywords(
+    keywords = [k for k, _ in kw.extract_keywords( 
+     #kw.extract_keywords=>[("마음", 0.75), ("비", 0.73), ("조금", 0.68)] 이런식인데 k,_ 로 뒤의 정확도는 빼고 앞의 키워드만
         text,
         keyphrase_ngram_range=(1, 2),
         top_n=6
@@ -89,28 +91,33 @@ def analyze_text(text: str):
     # 외부 시스템 호환용: 상위 감정 1,2 영어 매핑도 준비
     mood1_ko = top1[0]
     mood2_ko = top2[0] if top2 else ""
-    mood1_en = EMOTION_MAP_EN.get(mood1_ko, "chill")
+    mood1_en = EMOTION_MAP_EN.get(mood1_ko, "chill") #아무것도 없을때 기본값 chill로 설정
     mood2_en = EMOTION_MAP_EN.get(mood2_ko, "") if mood2_ko else ""
 
     # 숨겨둔 값들: 추천 단계에서 사용
-    return mood_dict, kw_spans, json.dumps({
+    return mood_dict, kw_spans, json.dumps({ #analyze_text(text:str)함수의 반환값
+        #반1.mood_dict(라벨:점수), 반2.kw_spans=>("마음", "KEYWORD"),("비", "KEYWORD")튜플로 나옴, 반3json.dumps=>MCP를 위해 JSON형식
         "mood_top1_ko": mood1_ko,
         "mood_top1_en": mood1_en,
         "mood_top1_score": float(top1[1]),
         "mood_top2_ko": mood2_ko,
         "mood_top2_en": mood2_en,
-        "mood_top2_score": float(top2[1]) if top2 else 0.0,
+        "mood_top2_score": float(top2[1]) if top2 else 0.0, #top2가 없으면 점수=0.0
         "keywords": keywords,
         "raw_text": text
     }, ensure_ascii=False), ", ".join(keywords), text
+    #반4.키워드 리스트를 쉼표로 합친 문자열 ("비, 마음, 가라앉은"), 반5.원문 텍스트
+    #!!총 반환 5개함
 
 # ==========================================
 # 4) MCP를 통한 OpenAI 추천 (의사 코드)
 #    - 실제 MCP 클라이언트/툴 이름/스키마에 맞게 수정
 #    - 한국어 결과를 요청
 # ==========================================
-def recommend_songs_via_mcp_korean(analysis_json: str, language: str = "ko"):
+def recommend_songs_via_mcp_korean(analysis_json: str, language: str = "ko"): 
+    
     """
+    analysis_json=>analyze_text(text:str)함수의 반환값
     MCP 세션에서 'openai_recommend_songs' 같은 툴을 호출한다고 가정.
     실제에 맞게 mcp_client.call_tool(...)로 교체하십시오.
     """
@@ -162,12 +169,15 @@ def recommend_songs_via_mcp_korean(analysis_json: str, language: str = "ko"):
     return songs
 
 # 추천 결과를 Gradio Dataframe 포맷으로 변환
-def to_rows(songs):
+def to_rows(songs): 
+    '''recommend_songs_via_mcp_korean(analysis_json: str, language: str = "ko")를 통해서 추천받은걸
+    다시 Gradio의 DataFrame UI 컴포넌트에 맞게 바꾸는 함수'''
+    
     rows = []
     for s in songs:
         rows.append([s.get("title",""), s.get("artist",""), s.get("reason",""), s.get("link","")])
     return rows
-
+##!! 여기까지가 MCP를 통한 한국어 노래 추천 함수
 # ==========================================
 # 5) Gradio UI (한국어)
 # ==========================================
@@ -205,6 +215,7 @@ with gr.Blocks(theme=gr.themes.Soft(primary_hue="indigo")) as demo:
         analyze_text,
         inputs=text,
         outputs=[mood_out, kw_out, hidden_analysis_json, hidden_keywords_csv, hidden_raw_text]
+        #위의 analyze_text(text:str)함수의 반환값 5개가 다 들어감
     )
 
     # 추천 버튼
