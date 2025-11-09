@@ -27,10 +27,10 @@ def call_analyze(text: str):
 def call_recommend(analysis_json: str):
     """
     백엔드 /recommend 호출해서
-    Gradio DataFrame에 맞는 2D 리스트로 변환
+    노래 목록(rows) + 각 행별 embed_url 리스트를 반환
     """
     if not analysis_json:
-        return []
+        return [], []
 
     res = requests.post(
         f"{BASE_URL}/recommend",
@@ -40,18 +40,55 @@ def call_recommend(analysis_json: str):
     data = res.json()
 
     rows = []
+    embeds = []  # embed_url 모아두기
     for s in data["songs"]:
         rows.append(
             [s["title"], s["artist"], s["reason"], s.get("link", "")]
         )
-    return rows
+        # embed_url이 없으면 그냥 일반 링크라도 넣어두기
+        embeds.append(s.get("embed_url") or s.get("link"))
+
+    return rows, embeds
+
+
+def play_preview(evt: gr.SelectData, embeds: list | None):
+    """
+    Dataframe에서 선택된 행의 embed_url을 받아
+    Spotify embed iframe HTML을 리턴.
+    """
+    if not embeds:
+        return "<p>재생할 곡 정보가 없습니다.</p>"
+
+    row_idx = evt.index[0]  # (row, col) → 행 인덱스
+    if not (0 <= row_idx < len(embeds)):
+        return "<p>잘못된 선택입니다.</p>"
+
+    url = embeds[row_idx]
+    if not url:
+        return "<p>이 곡은 Spotify에서 재생 정보를 제공하지 않습니다.</p>"
+
+    # 혹시 일반 트랙 URL이면 embed 형태로 변환
+    if "open.spotify.com/track/" in url and "embed" not in url:
+        # .../track/{id}?...
+        parts = url.split("/")
+        try:
+            track_part = [p for p in parts if "track" in p][-1]  # "track" 뒤가 id일 수도 있어서 안전하게
+        except IndexError:
+            track_part = parts[-1]
+        track_id = track_part.split("?")[0]
+        url = f"https://open.spotify.com/embed/track/{track_id}"
+
+    iframe_html = f"""
+    <iframe src="{url}" width="100%" height="80" frameborder="0"
+        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture">
+    </iframe>
+    """
+
+    return iframe_html
+
 
 
 def create_demo():
-    """
-    Gradio Blocks 앱을 생성만 하고 반환.
-    실행(launch)은 app.py에서 담당.
-    """
     with gr.Blocks(theme=gr.themes.Soft(primary_hue="indigo")) as demo:
         gr.Markdown("## 🎵 한국어 감정/키워드 분석 + 노래 추천 (API 연동)")
 
@@ -73,12 +110,18 @@ def create_demo():
 
         rec_out = gr.Dataframe(
             headers=["title", "artist", "reason", "link"],
-            label="추천 결과",
+            label="추천 결과 (행 클릭하면 spotify player 표시)",
             datatype=["str", "str", "str", "str"],
             wrap=True,
         )
 
-        # 1) 분석 버튼
+        embed_state = gr.State([])
+
+        player_html = gr.HTML(
+            value="<p>곡을 선택하면 여기 아래에 Spotify 플레이어가 뜹니다.</p>"
+        )
+
+        # 1) 분석
         analyze_btn.click(
             call_analyze,
             inputs=text,
@@ -91,11 +134,18 @@ def create_demo():
             ],
         )
 
-        # 2) 추천 버튼
+        # 2) 추천
         recommend_btn.click(
             call_recommend,
             inputs=hidden_analysis_json,
-            outputs=rec_out,
+            outputs=[rec_out, embed_state],
+        )
+
+        # 3) 행 선택 → Spotify embed 플레이어
+        rec_out.select(
+            play_preview,
+            inputs=embed_state,
+            outputs=player_html,
         )
 
     return demo

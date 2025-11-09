@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import os
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -21,10 +21,15 @@ from pydantic import BaseModel
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise RuntimeError("OPENAI_API_KEY 환경 변수가 설정되지 않았습니다.")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+
+if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
+    raise RuntimeError("SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET 환경 변수가 필요합니다.")
 
 sp_auth = SpotifyClientCredentials(
     client_id=SPOTIFY_CLIENT_ID,
@@ -121,12 +126,68 @@ def analyze_text_logic(text: str):
     keywords_csv = ", ".join(keywords)
 
     return mood_dict, kw_spans, analysis_json, keywords_csv, text
-
-
+    
 # =========================
 # 2) OpenAI 기반 추천 로직
 # =========================
-def recommend_songs_via_openai_logic(analysis_json: str):
+SYSTEM_PROMPT_MUSIC = """
+너는 한국어로 대답하는 음악 추천 큐레이터야.
+
+입력으로 한 사용자의 감정 분석 결과 JSON이 주어진다.
+JSON 구조는 대략 다음과 같다:
+
+{
+  "mood_top1_ko": string,
+  "mood_top1_en": string,
+  "mood_top1_score": float,
+  "mood_top2_ko": string,
+  "mood_top2_en": string,
+  "mood_top2_score": float,
+  "keywords": [string, ...],
+  "raw_text": string,
+  "weights": [[string, float], ...]   // (상위 감정, 가중치) 쌍 리스트 (추가 정보)
+}
+
+너의 역할:
+- 감정 정보와 키워드를 보고 사용자의 현재 분위기와 상황을 이해한다.
+- 한국 사용자에게 어울리는 곡 5개를 추천한다.
+
+규칙:
+1. 곡은 5곡만 추천한다.
+2. 각 곡은 아래 필드를 반드시 포함해야 한다.
+   - "title": 곡 제목 (문자열)
+   - "artist": 아티스트 이름 (문자열)
+   - "reason": 이 곡을 추천한 이유 (한국어 1~2문장)
+   - "mood_tags": 감정/분위기와 관련된 태그 리스트 (예: ["슬픔", "집중"])
+   - "match_score": 0.0~1.0 사이의 수치로, 이 곡이 얼마나 잘 맞는지에 대한 너의 판단
+3. 감정(특히 weights 정보)과 keywords를 적극 반영해 분위기가 잘 맞는 곡을 고른다.
+4. 한국 사용자에게 너무 생소하지 않은 곡 위주로 추천한다.
+5. 곡들은 아티스트/분위기를 적당히 다양하게 구성한다.
+6. 응답은 반드시 JSON 형식의 객체 하나만 포함해야 한다.
+   JSON 바깥의 텍스트나 설명은 절대 쓰지 않는다.
+
+출력 형식(JSON):
+
+{
+  "tracks": [
+    {
+      "title": "곡 제목",
+      "artist": "아티스트 이름",
+      "reason": "이 곡을 추천한 이유",
+      "mood_tags": ["..."],
+      "match_score": 0.0
+    },
+    ...
+  ]
+}
+""".strip()
+
+
+def recommend_songs_via_openai_logic(analysis_json: str) -> List[Dict[str, Any]]:
+    """
+    감정 분석 결과(analysis_json)를 기반으로 곡 추천 리스트를 반환.
+    반환값: [{"title": ..., "artist": ..., "reason": ..., "mood_tags": [...], "match_score": ...}, ...]
+    """
     info = json.loads(analysis_json or "{}")
     mood1 = info.get("mood_top1_ko")
     mood2 = info.get("mood_top2_ko")
@@ -135,82 +196,78 @@ def recommend_songs_via_openai_logic(analysis_json: str):
     keywords = info.get("keywords", [])
     text = info.get("raw_text", "")
 
-    weights = []
+    # 감정 가중치 계산 (LLM 참고용)
+    weights: List[List[Any]] = []
     if mood1:
-        weights.append((mood1, round(0.6 * s1, 2)))
+        weights.append([mood1, round(0.6 * s1, 2)])
     if mood2 and s2 > 0.2:
-        weights.append((mood2, round(0.4 * s2, 2)))
+        weights.append([mood2, round(0.4 * s2, 2)])
+
+    info["weights"] = weights
+
+    payload = {
+        "emotion": info,
+    }
 
     user_prompt_ko = f"""
-당신은 한국어로 응답하는 음악 추천 엔진입니다.
+다음은 한 사용자의 감정 분석 정보야.
+이 정보를 기반으로 위에서 설명한 규칙과 출력 형식을 지켜서 곡을 추천해라.
 
-아래 정보를 바탕으로, **JSON 배열**만 출력하세요.
-각 요소는 다음 키를 반드시 가져야 합니다:
-- "title": 곡 제목 (문자열)
-- "artist": 가수/아티스트 (문자열)
-- "reason": 이 곡을 추천한 이유 (한국어로 1~2문장)
+[사용자 원문]
+{text}
 
-JSON 이외의 텍스트는 절대 출력하지 마세요.
-
-[입력 정보]
-- 사용자 원문: {text}
-- 감정(가중치): {weights}
-- 키워드: {", ".join(keywords)}
-
-조건:
-1) 감정/키워드 분위기에 어울리는 곡 5개만 추천
-2) 한국 사용자에게 너무 생소하지 않은 곡 위주
-3) reason은 감정/키워드를 언급하며 자연스럽게 설명
-"""
+[감정 및 키워드 JSON]
+```json
+{json.dumps(payload, ensure_ascii=False)}
+""".strip()
 
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
+        response_format={"type": "json_object"},
         messages=[
-            {
-                "role": "system",
-                "content": "너는 음악 추천 전문가야. 반드시 JSON 배열만 출력해.",
-            },
+            {"role": "system", "content": SYSTEM_PROMPT_MUSIC},
             {"role": "user", "content": user_prompt_ko},
         ],
         temperature=0.8,
     )
 
-    raw = resp.choices[0].message.content.strip()
-
-    # 혹시 ```json … ``` 코드블럭이면 제거
-    if raw.startswith("```"):
-        lines = []
-        for line in raw.splitlines():
-            if line.strip().startswith("```"):
-                continue
-            lines.append(line)
-        raw = "\n".join(lines).strip()
+    content = resp.choices[0].message.content.strip()
 
     try:
-        songs = json.loads(raw)
-        if isinstance(songs, dict):
-            songs = [songs]
+        obj = json.loads(content)
+        tracks = obj.get("tracks", [])
+        if not isinstance(tracks, list):
+            print("[recommend] tracks 필드가 리스트가 아닙니다:", tracks)
+            return []
+        return tracks
     except json.JSONDecodeError:
-        print("[recommend] JSON 파싱 실패:", raw)
-        songs = []
-
-    return songs
-
-
+        print("[recommend] JSON 파싱 실패:", content)
+        return []
+    
 def attach_spotify_links_logic(songs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    OpenAI 추천 결과에 Spotify 링크 붙이기
+    OpenAI 추천 결과에 Spotify 링크 + 미리듣기
+    나중에 바로 음악 틀어지게 변경 가능
     """
-    enriched = []
+    enriched: List[Dict[str, Any]] = []
+
     for s in songs:
         title = s.get("title", "")
         artist = s.get("artist", "")
         reason = s.get("reason", "")
 
+        # 제목이 없으면 스킵
         if not title:
             continue
 
+        # 제목 + 아티스트 조합으로 검색
         query = f"track:{title} artist:{artist}" if artist else title
+
+        link = ""
+        preview_url = ""
+        track_id = ""
+        uri = ""
+        embed_url = ""
 
         try:
             res = sp.search(q=query, type="track", limit=1)
@@ -218,22 +275,29 @@ def attach_spotify_links_logic(songs: List[Dict[str, Any]]) -> List[Dict[str, An
             if items:
                 track = items[0]
                 link = track.get("external_urls", {}).get("spotify", "")
-            else:
-                link = ""
+                preview_url = track.get("preview_url") or ""
+                track_id = track.get("id") or ""
+                uri = track.get("uri") or ""
+                if track_id:
+                    embed_url = f"https://open.spotify.com/embed/track/{track_id}"
         except Exception as e:
             print("Spotify 검색 에러:", e)
-            link = ""
 
         enriched.append(
             {
                 "title": title,
                 "artist": artist,
                 "reason": reason,
-                "link": link,
+                "link": link,              # 전체곡 열기
+                "preview_url": preview_url, # 30초 미리듣기 mp3
+                "track_id": track_id,       # 임베드/딥링크용
+                "uri": uri,
+                "embed_url": embed_url,
             }
         )
 
     return enriched
+
 
 
 # =========================
@@ -265,7 +329,10 @@ class Song(BaseModel):
     artist: str
     reason: str
     link: str = ""
-
+    preview_url: Optional[str] = None
+    track_id: Optional[str] = None
+    uri: Optional[str] = None
+    embed_url: Optional[str] = None
 
 class RecommendResponse(BaseModel):
     songs: List[Song]
@@ -309,6 +376,10 @@ def recommend_endpoint(req: RecommendRequest):
                 artist=s.get("artist", ""),
                 reason=s.get("reason", ""),
                 link=s.get("link", ""),
+                preview_url=s.get("preview_url", ""),
+                track_id=s.get("track_id", ""),
+                uri=s.get("uri", ""),
+                embed_url=s.get("embed_url", ""),
             )
             for s in songs_with_links
         ]
