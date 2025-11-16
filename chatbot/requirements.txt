@@ -11,4 +11,7 @@ openai>=1.0.0
 spotipy>=2.23.0
 python-dotenv>=1.0.1
 
+fastapi>=0.115.12,<0.116
+uvicorn[standard]==0.34.0
+pydantic==2.11.3
 ##가상환경 만들어서 하는걸 추천

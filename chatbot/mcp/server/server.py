@@ -104,7 +104,7 @@ def analyze_text_logic(text: str):
     kw_spans = [(k, "KEYWORD") for k in keywords]
 
     # 상위 감정 + 키워드 JSON (추천 단계에서 사용)
-    mood1_ko = top1[0]
+    mood1_ko = top1[0] #상위1의 한국어 감정
     mood2_ko = top2[0] if top2 else ""
     mood1_en = EMOTION_MAP_EN.get(mood1_ko, "chill")
     mood2_en = EMOTION_MAP_EN.get(mood2_ko, "") if mood2_ko else ""
@@ -198,8 +198,9 @@ def recommend_songs_via_openai_logic(analysis_json: str) -> List[Dict[str, Any]]
 
     # 감정 가중치 계산 (LLM 참고용)
     weights: List[List[Any]] = []
+    # weight 리스트 = [(감정라벨1, 가중치점수), (감정라벨2, 가중치점수)]
     if mood1:
-        weights.append([mood1, round(0.6 * s1, 2)])
+        weights.append([mood1, round(0.6 * s1, 2)]) #소숫점 두자리에서 반올림
     if mood2 and s2 > 0.2:
         weights.append([mood2, round(0.4 * s2, 2)])
 
@@ -207,7 +208,7 @@ def recommend_songs_via_openai_logic(analysis_json: str) -> List[Dict[str, Any]]
 
     payload = {
         "emotion": info,
-    }
+    } #유저의 analysis_json 내용 +가중치를 포함한 딕셔너리 생성
 
     user_prompt_ko = f"""
 다음은 한 사용자의 감정 분석 정보야.
@@ -217,9 +218,8 @@ def recommend_songs_via_openai_logic(analysis_json: str) -> List[Dict[str, Any]]
 {text}
 
 [감정 및 키워드 JSON]
-```json
 {json.dumps(payload, ensure_ascii=False)}
-""".strip()
+""".strip() ## user_prompt_ko 생성
 
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -234,17 +234,18 @@ def recommend_songs_via_openai_logic(analysis_json: str) -> List[Dict[str, Any]]
     content = resp.choices[0].message.content.strip()
 
     try:
-        obj = json.loads(content)
+        obj = json.loads(content) #content json을 딕셔너리로
         tracks = obj.get("tracks", [])
         if not isinstance(tracks, list):
             print("[recommend] tracks 필드가 리스트가 아닙니다:", tracks)
             return []
-        return tracks
+        return tracks  #{'tracks': [{'title': '밤편지'}]} 이형태 
     except json.JSONDecodeError:
         print("[recommend] JSON 파싱 실패:", content)
         return []
     
 def attach_spotify_links_logic(songs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    #songs=={'tracks': [{'title': '밤편지', "artist": "아이유","match_score": 0.92} ,{}]}
     """
     OpenAI 추천 결과에 Spotify 링크 + 미리듣기
     나중에 바로 음악 틀어지게 변경 가능
@@ -367,8 +368,8 @@ def analyze_endpoint(req: AnalyzeRequest):
 
 @app.post("/recommend", response_model=RecommendResponse)
 def recommend_endpoint(req: RecommendRequest):
-    songs = recommend_songs_via_openai_logic(req.analysis_json)
-    songs_with_links = attach_spotify_links_logic(songs)
+    songs = recommend_songs_via_openai_logic(req.analysis_json) #songs=track 리스트 {'tracks': [{'title': '밤편지'}]}
+    songs_with_links = attach_spotify_links_logic(songs)  #enriched 정보
     return RecommendResponse(
         songs=[
             Song(
