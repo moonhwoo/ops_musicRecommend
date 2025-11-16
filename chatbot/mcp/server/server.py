@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+import difflib
 # =========================
 # 환경 변수 / 외부 API 설정
 # =========================
@@ -104,7 +105,7 @@ def analyze_text_logic(text: str):
     kw_spans = [(k, "KEYWORD") for k in keywords]
 
     # 상위 감정 + 키워드 JSON (추천 단계에서 사용)
-    mood1_ko = top1[0]
+    mood1_ko = top1[0] #상위1의 한국어 감정
     mood2_ko = top2[0] if top2 else ""
     mood1_en = EMOTION_MAP_EN.get(mood1_ko, "chill")
     mood2_en = EMOTION_MAP_EN.get(mood2_ko, "") if mood2_ko else ""
@@ -150,10 +151,10 @@ JSON 구조는 대략 다음과 같다:
 
 너의 역할:
 - 감정 정보와 키워드를 보고 사용자의 현재 분위기와 상황을 이해한다.
-- 한국 사용자에게 어울리는 곡 5개를 추천한다.
+- 한국 사용자에게 어울리는 곡 10개를 추천한다.
 
 규칙:
-1. 곡은 5곡만 추천한다.
+1. 곡은 실제로 존재하는 10곡만 추천한다.
 2. 각 곡은 아래 필드를 반드시 포함해야 한다.
    - "title": 곡 제목 (문자열)
    - "artist": 아티스트 이름 (문자열)
@@ -198,8 +199,9 @@ def recommend_songs_via_openai_logic(analysis_json: str) -> List[Dict[str, Any]]
 
     # 감정 가중치 계산 (LLM 참고용)
     weights: List[List[Any]] = []
+    # weight 리스트 = [(감정라벨1, 가중치점수), (감정라벨2, 가중치점수)]
     if mood1:
-        weights.append([mood1, round(0.6 * s1, 2)])
+        weights.append([mood1, round(0.6 * s1, 2)]) #소숫점 두자리에서 반올림
     if mood2 and s2 > 0.2:
         weights.append([mood2, round(0.4 * s2, 2)])
 
@@ -207,7 +209,7 @@ def recommend_songs_via_openai_logic(analysis_json: str) -> List[Dict[str, Any]]
 
     payload = {
         "emotion": info,
-    }
+    } #유저의 analysis_json 내용 +가중치를 포함한 딕셔너리 생성
 
     user_prompt_ko = f"""
 다음은 한 사용자의 감정 분석 정보야.
@@ -217,9 +219,8 @@ def recommend_songs_via_openai_logic(analysis_json: str) -> List[Dict[str, Any]]
 {text}
 
 [감정 및 키워드 JSON]
-```json
 {json.dumps(payload, ensure_ascii=False)}
-""".strip()
+""".strip() ## user_prompt_ko 생성
 
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -234,33 +235,42 @@ def recommend_songs_via_openai_logic(analysis_json: str) -> List[Dict[str, Any]]
     content = resp.choices[0].message.content.strip()
 
     try:
-        obj = json.loads(content)
+        obj = json.loads(content) #content json을 딕셔너리로
         tracks = obj.get("tracks", [])
         if not isinstance(tracks, list):
             print("[recommend] tracks 필드가 리스트가 아닙니다:", tracks)
             return []
-        return tracks
+        return tracks  #{'tracks': [{'title': '밤편지'}]} 이형태 
     except json.JSONDecodeError:
         print("[recommend] JSON 파싱 실패:", content)
         return []
     
-def attach_spotify_links_logic(songs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def attach_spotify_links_logic(
+    songs: List[Dict[str, Any]],
+    min_valid: int = 4
+) -> List[Dict[str, Any]]:
     """
-    OpenAI 추천 결과에 Spotify 링크 + 미리듣기
-    나중에 바로 음악 틀어지게 변경 가능
+    OpenAI 추천 결과에 Spotify 링크 + 미리듣기 추가.
+    - Spotify에서 실제로 찾은 곡만 반환
+    - 제목 유사도가 너무 낮으면(다른 곡으로 판단) 스킵
+    - 최소 min_valid개 이상 찾으려고 시도 (부족하면 찾은 만큼만 반환)
     """
     enriched: List[Dict[str, Any]] = []
 
+    # 내부에서만 쓸 제목 정규화 함수
+    def _normalize(s: str) -> str:
+        # 소문자로 바꾸고 공백 제거 (한글은 lower 영향 거의 없음)
+        return "".join(ch for ch in s.lower() if not ch.isspace())
+
     for s in songs:
-        title = s.get("title", "")
-        artist = s.get("artist", "")
+        title = s.get("title", "").strip()
+        artist = s.get("artist", "").strip()
         reason = s.get("reason", "")
 
-        # 제목이 없으면 스킵
         if not title:
             continue
 
-        # 제목 + 아티스트 조합으로 검색
+        # 기본 검색: title + artist
         query = f"track:{title} artist:{artist}" if artist else title
 
         link = ""
@@ -270,34 +280,80 @@ def attach_spotify_links_logic(songs: List[Dict[str, Any]]) -> List[Dict[str, An
         embed_url = ""
 
         try:
+            # 1차 검색
             res = sp.search(q=query, type="track", limit=1)
             items = res.get("tracks", {}).get("items", [])
-            if items:
-                track = items[0]
-                link = track.get("external_urls", {}).get("spotify", "")
-                preview_url = track.get("preview_url") or ""
-                track_id = track.get("id") or ""
-                uri = track.get("uri") or ""
-                if track_id:
-                    embed_url = f"https://open.spotify.com/embed/track/{track_id}"
+
+            # 1차 검색 실패 시, 제목만으로 다시 시도
+            if not items and artist:
+                res = sp.search(q=title, type="track", limit=1)
+                items = res.get("tracks", {}).get("items", [])
+
+            # 그래도 없다면 이 곡은 건너뜀
+            if not items:
+                print(f"[Spotify] '{title}' ({artist}) 검색 실패, 스킵.")
+                continue
+
+            track = items[0]
+
+            # Spotify 실제 메타데이터
+            spotify_title = track.get("name", "")
+            spotify_artists = track.get("artists", [])
+            spotify_main_artist = spotify_artists[0]["name"] if spotify_artists else artist
+
+            # 🔍 제목 유사도 체크 (눈물 vs 눈물참기 같은 케이스 거르기)
+            input_title_norm = _normalize(title)
+            spotify_title_norm = _normalize(spotify_title)
+
+            title_ratio = difflib.SequenceMatcher(
+                None, input_title_norm, spotify_title_norm
+            ).ratio()
+
+            # 예: 눈물(2글자) vs 눈물참기(4글자) → ratio 대략 0.66 정도
+            if title_ratio < 0.8:
+                print(
+                    f"[Spotify] 제목 유사도 낮음 → '{title}' vs '{spotify_title}' "
+                    f"(ratio={title_ratio:.2f}) → 스킵"
+                )
+                continue
+
+            # 여기까지 통과하면 Spotify 메타데이터 사용
+            link = track.get("external_urls", {}).get("spotify", "")
+            preview_url = track.get("preview_url") or ""
+            track_id = track.get("id") or ""
+            uri = track.get("uri") or ""
+
+            if not track_id and not link:
+                # 링크 정보도 없으면 스킵
+                print(f"[Spotify] '{title}' ({artist})는 링크 정보가 없음, 스킵.")
+                continue
+
+            if track_id:
+                embed_url = f"https://open.spotify.com/embed/track/{track_id}"
+
+            enriched.append(
+                {
+                    # 가능하면 Spotify 쪽 제목/가수로 덮어쓰기
+                    "title": spotify_title or title,
+                    "artist": spotify_main_artist,
+                    "reason": reason,
+                    "link": link,
+                    "preview_url": preview_url,
+                    "track_id": track_id,
+                    "uri": uri,
+                    "embed_url": embed_url,
+                }
+            )
+
+            # ✅ 유효한 곡이 min_valid개 모이면 바로 종료
+            if len(enriched) >= min_valid:
+                break
+
         except Exception as e:
             print("Spotify 검색 에러:", e)
-
-        enriched.append(
-            {
-                "title": title,
-                "artist": artist,
-                "reason": reason,
-                "link": link,              # 전체곡 열기
-                "preview_url": preview_url, # 30초 미리듣기 mp3
-                "track_id": track_id,       # 임베드/딥링크용
-                "uri": uri,
-                "embed_url": embed_url,
-            }
-        )
+            continue
 
     return enriched
-
 
 
 # =========================
@@ -367,8 +423,8 @@ def analyze_endpoint(req: AnalyzeRequest):
 
 @app.post("/recommend", response_model=RecommendResponse)
 def recommend_endpoint(req: RecommendRequest):
-    songs = recommend_songs_via_openai_logic(req.analysis_json)
-    songs_with_links = attach_spotify_links_logic(songs)
+    songs = recommend_songs_via_openai_logic(req.analysis_json) #songs=track 리스트 {'tracks': [{'title': '밤편지'}]}
+    songs_with_links = attach_spotify_links_logic(songs,min_valid=4)  #enriched 정보
     return RecommendResponse(
         songs=[
             Song(

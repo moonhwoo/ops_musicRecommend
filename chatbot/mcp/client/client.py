@@ -10,6 +10,11 @@ def call_analyze(text: str):
     """
     백엔드 /analyze 호출해서
     (mood, kw_spans, analysis_json, keywords_csv, raw_text)를 반환
+    # mood: {라벨:점수} 딕셔너리
+    # kw_spans: (키워드, "KEYWORD") 튜플 리스트
+    # analysis_json: MCP 추천용 JSON 문자열 
+    # keywords_csv: 키워드 쉼표 연결 문자열
+    # raw_text: 원문 텍스트
     """
     res = requests.post(f"{BASE_URL}/analyze", json={"text": text})
     res.raise_for_status()
