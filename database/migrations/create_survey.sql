@@ -1,6 +1,7 @@
 CREATE TABLE user_preferences (
     user_id INT PRIMARY KEY,
     novelty_score TINYINT NOT NULL CHECK (novelty_score BETWEEN 0 AND 10),
+     preferred_year_category VARCHAR(20) DEFAULT NULL, -- ex: '1990s', '2000s', 'ALL'
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE

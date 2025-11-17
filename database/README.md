@@ -20,40 +20,158 @@
 
 ##  실행 방법
 
-### 1. 테이블 생성 (순서대로)
+# 🎵 OPS Music Recommend – 로컬 DB 세팅 가이드
+
+팀원들이 **로컬 MySQL 환경을 동일하게 맞추고** 백엔드 개발을 진행할 수 있도록 
+
+아래 순서를 그대로 따르면 **DB 생성 → 테이블 생성 → Seed 데이터 입력 → .env 설정**까지 완료됩니다.
+
+---
+
+## ✅ 1. MySQL 설치
+
+### macOS (Homebrew)
+
 ```bash
-mysql -u root -p your_database < migrations/create_users.sql
-mysql -u root -p your_database < migrations/create_survey_tables.sql
-mysql -u root -p your_database < migrations/create_genres.sql
-mysql -u root -p your_database < migrations/004_create_playback_tables.sql
+brew install mysql
+brew services start mysql
 ```
 
-### 2. 초기 데이터 삽입
+### Windows
+
+1. MySQL Installer 다운로드
+2. MySQL Server + MySQL Workbench 설치
+3. 설치 과정에서 root 비밀번호 설정
+
+---
+
+##  2. MySQL 접속 확인
+
+아래 명령을 터미널(또는 CMD/Powershell)에서 실행:
+
 ```bash
-mysql -u root -p your_database < seeds/genres_seeds.sql
+mysql -u root -p
 ```
 
-### 3. 한 번에 실행
-```bash
-cat migrations/*.sql seeds/*.sql | mysql -u root -p your_database
+비밀번호 입력 후 MySQL 콘솔이 열리면 정상입니다.(비밀번호를 꼭 기억해야 합니다)
+
+---
+
+##  3. 데이터베이스 생성
+
+MySQL 콘솔 안에서 아래 실행:
+
+```sql
+CREATE DATABASE ops_music_recommend CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+생성 확인:
+
+```sql
+SHOW DATABASES;
 ```
 
 ---
 
-## ERD
+##  4. 테이블 생성 + Seed 데이터 삽입
+
+프로젝트 루트 위치에서 아래 명령을 *하나씩* 실행하세요.
+
+> database폴더안에 migrations 폴더에 들어가서 실행합니다.
+
+```bash
+mysql -u root -p ops_music_recommend < migrations/create_users.sql
+mysql -u root -p ops_music_recommend < migrations/create_genres.sql
+mysql -u root -p ops_music_recommend < migrations/create_survey.sql
+mysql -u root -p ops_music_recommend < migrations/create_playback.sql
+mysql -u root -p ops_music_recommend < migrations/seeds.sql
 ```
-users (1) ─┬─ (1) user_preferences
-           │
-           ├─ (N) user_favorite_genres (N) ─── (1) genres
-           │
-           ├─ (N) user_favorite_artists
-           │
-           ├─ (1) user_locations
-           │
-           └─ (N) play_history
+
+오류 없이 실행되면 테이블 및 기본 데이터 입력이 완료된 것입니다.
+
+---
+
+## ✅ 5. 테이블 생성 확인
+
+MySQL 접속:
+
+```bash
+mysql -u root -p
+```
+
+DB 선택:
+
+```sql
+USE ops_music_recommend;
+```
+
+테이블 목록 확인:
+
+```sql
+SHOW TABLES;
+```
+
+예상되는 테이블:
+
+* users
+* genres
+* survey
+* play_history
+* user_preferences
+* user_favorite_genres
+* user_favorite_artists
+* user_locations
+
+간단한 데이터 확인:
+
+```sql
+SELECT * FROM genres;
 ```
 
 ---
+
+##  6. .env 파일 설정
+
+프로젝트 루트에 `.env` 파일을 생성하고 아래 내용 추가:
+
+```
+DB_URL=mysql+pymysql://root:본인비밀번호@localhost:3306/ops_music_recommend
+```
+
+예시:
+
+```
+DB_URL=mysql+pymysql://root:1234@localhost:3306/ops_music_recommend
+```
+
+>  비밀번호만 본인 MySQL root 비밀번호로 변경하면 됩니다.
+
+---
+
+## ⚙️ 7. DB 연결 테스트 (선택)
+
+### 필요한 패키지 설치
+
+```bash
+pip install sqlalchemy pymysql python-dotenv
+```
+
+### 테스트 실행
+
+```bash
+python database/database.py
+```
+
+정상 출력 예시:
+
+* SQL 실행 로그
+* genres 테이블 레코드 목록
+
+---
+
+##  완료!
+
+
 
 ## 🔧 추후 확장 예정
 
