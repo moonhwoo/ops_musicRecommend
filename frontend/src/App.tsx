@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import MapView from './MapView';
 
 // 서버에서 받아올 곡 정보 타입 정의
 type Item = {
@@ -9,7 +10,43 @@ type Item = {
   count: number
 }
 
+type NowItem = {
+  userId: string;
+  userName?: string;
+  title: string;
+  artist: string;
+  albumArt?: string;
+  distance: number;
+  playedAt: string;
+  lat: number;
+  lng: number;
+};
+
+
+
 export default function App() {
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const accessToken = params.get("access_token");
+    const userId = params.get("user_id");
+    const displayName = params.get("display_name");
+
+    if (accessToken && userId) {
+      localStorage.setItem("spotify_access_token", accessToken);
+      localStorage.setItem("spotify_user_id", userId);
+      localStorage.setItem("spotify_display_name", displayName || "");
+
+      params.delete("access_token");
+      params.delete("user_id");
+      params.delete("display_name");
+      const cleanURL =
+        window.location.pathname +
+        (params.toString() ? `?${params.toString()}` : "");
+      window.history.replaceState({}, "", cleanURL);
+    }
+  }, []);
+
   // 사용자의 현재 위치
   const [pos, setPos] = useState<{ lat: number; lng: number } | null>(null)
 
@@ -25,6 +62,17 @@ export default function App() {
   const [err, setErr] = useState<string | null>(null)
 
 
+  const [nowFeed, setNowFeed] = useState<NowItem[]>([]);
+  const [nowLoading, setNowLoading] = useState(false);
+
+  // ✅ 위치공유 스위치 상태
+  const [shareOn, setShareOn] = useState(false);
+
+  const [liveRadiusKm, setLiveRadiusKm] = useState(2);
+
+
+
+
   // ✅ 위치 가져오기
   useEffect(() => {
     if (!navigator.geolocation) { setErr('이 브라우저는 위치를 지원하지 않아요'); return }
@@ -36,7 +84,7 @@ export default function App() {
   }, [])
 
 
-  // ✅ API 쿼리 문자열 생성
+  // ✅ 인기곡 API 쿼리 문자열 생성
   const query = useMemo(() => {
     const lat = pos?.lat ?? 0, lng = pos?.lng ?? 0
     const q = new URLSearchParams({
@@ -64,7 +112,7 @@ export default function App() {
     return () => clearTimeout(t)
   }, [query])
 
-  // ✅ 현재 재생곡 저장 (Spotify 연동)
+  // ✅ 현재 재생곡 저장 (버튼 -> 인기곡용)
   async function logCurrentSong() {
     if (!navigator.geolocation) {
       alert("이 브라우저는 위치 서비스를 지원하지 않아요 😢");
@@ -76,25 +124,93 @@ export default function App() {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
 
+        const accessToken = localStorage.getItem("spotify_access_token");
+        const userId = localStorage.getItem("spotify_user_id");
+
         const res = await fetch("/currently-playing", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lat, lng })
-        });
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lat,
+          lng,
+          accessToken,
+          userId
+        }),
+      });
+
 
         const data = await res.json();
-        console.log("서버 응답:", data);
+        console.log("버튼 저장 응답:", data);
 
-        if (data.ok) alert("현재 듣는 노래가 저장되었습니다 🎵");
-        else alert("노래 저장 실패 또는 현재 재생 중인 곡이 없어요.");
+        if (data.ok) alert("인기곡에 반영되었습니다 🎵");
+        else alert("❌ 재생 중인 곡이 없어서 저장되지 않았어요!");
       },
-      (err) => {
-        console.error(err);
-        alert("위치 권한이 필요합니다!");
-      },
+      () => alert("위치 권한이 필요합니다!"),
       { enableHighAccuracy: true, timeout: 8000 }
     );
   }
+
+  // ✅ "지금 듣는 사람들" 불러오기 (live 전용)
+  useEffect(() => {
+    if (!pos) return;
+    const timer = setInterval(async () => {
+      try {
+        setNowLoading(true);
+        const res = await fetch(
+          `/api/now/nearby?lat=${pos.lat}&lng=${pos.lng}&radius_km=${liveRadiusKm}&window_s=10`
+        );
+        const data = await res.json();
+
+        const mapped = (data.items || []).map((item: any) => ({
+        userName: item.userName,
+        title: item.title,
+        artist: item.artist,
+        albumArt: item.albumArt,
+        lat: item.loc.coordinates[1], // lat
+        lng: item.loc.coordinates[0], // lng
+        distance: item.distance, 
+        }));
+
+        setNowFeed(mapped);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setNowLoading(false);
+      }
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [pos]);
+
+  // ✅ 위치공유 ON일 때만 /live/now 자동 업로드
+  useEffect(() => {
+    if (!pos || !shareOn) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const accessToken = localStorage.getItem("spotify_access_token");
+        const userId = localStorage.getItem("spotify_user_id");
+        const userName = localStorage.getItem("spotify_display_name"); 
+
+        const res = await fetch("/live/now", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lat: pos.lat,
+            lng: pos.lng,
+            accessToken,
+            userId,
+            userName, 
+          }),
+        });
+        const data = await res.json();
+        console.log("live 업로드 응답:", data);
+      } catch (e) {
+        console.error("live 업로드 실패:", e);
+      }
+    }, 10000); // 10초마다
+
+    return () => clearInterval(interval);
+  }, [pos, shareOn]);
 
 
 
@@ -102,18 +218,31 @@ export default function App() {
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: 16 }}>
 
-      {/* ✅ 현재 위치 표시 */}
+      {/* ✅ 현재 위치 지도 표시 */}
       {pos ? (
-        <p style={{ fontSize: 14, color: '#555' }}>
-          📍 내 현재 위치: 위도 {pos.lat.toFixed(6)}, 경도 {pos.lng.toFixed(6)}
-        </p>
-      ) : (
-        <p style={{ fontSize: 14, color: '#999' }}>📍 위치를 불러오는 중...</p>
-      )}
+      <MapView nowFeed={nowFeed} pos={pos} radiusKm={radiusKm} />
+    ) : (
+      <p style={{ fontSize: 14, color: '#999' }}>📍 위치를 불러오는 중...</p>
+    )}
 
-      {/* 현재 재생곡 저장 버튼 */}
+      {/* ✅ 위치공유 스위치 */}
+      <div style={{ marginTop: 8, marginBottom: 8 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={shareOn}
+            onChange={() => setShareOn(v => !v)}
+          />
+          <span>주변 사람들과 지금 듣는 노래 공유하기</span>
+        </label>
+        <p style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+          ON 시, 10초마다 현재 듣는 노래와 내 위치가 익명으로 공유됩니다. (인기곡 통계에는 반영되지 않아요)
+        </p>
+      </div>
+
+      {/* 현재 재생곡 저장 버튼 (인기곡용) */}
       <button onClick={logCurrentSong} style={{ padding: '10px', margin: '10px 0', fontSize: '16px' }}>
-        🎧 현재 듣는 노래 저장하기
+        🎧 현재 듣는 노래를 '내 주변 인기곡'에 반영하기
       </button>
 
       <h2>내 주변 인기곡</h2>
@@ -142,22 +271,23 @@ export default function App() {
           />
         </label>
       </div>
-      <div style={{ marginTop: 12}}>
-      <p style={{ fontWeight: 600 }}>조회 기간</p>
-      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-        {[1, 7, 30, 90].map((d) => (
-          <label key={d} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <input
-              type="radio"
-              name="windowD" 
-              value={d}
-              checked={windowD === d}
-              onChange={() => setWindowD(d)}
-            />
-            최근 {d}일
-          </label>
-        ))}
-      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <p style={{ fontWeight: 600 }}>조회 기간</p>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          {[1, 7, 30, 90].map((d) => (
+            <label key={d} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="radio"
+                name="windowD"
+                value={d}
+                checked={windowD === d}
+                onChange={() => setWindowD(d)}
+              />
+              최근 {d}일
+            </label>
+          ))}
+        </div>
       </div>
 
       {/* 오류 및 로딩 표시 */}
@@ -168,7 +298,6 @@ export default function App() {
       <ol style={{ marginTop: 12 }}>
         {items.map((it, i) => (
           <li key={it.trackId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid #eee' }}>
-            {/* ✅ 앨범 커버 이미지 표시 */}
             <div style={{ width: 48, height: 48 }}>
               {it.albumArt ? (
                 <img
@@ -200,6 +329,52 @@ export default function App() {
           </li>
         ))}
       </ol>
+
+      <h2 style={{ marginTop: 40 }}>🗣️ 주변에서 노래를 듣고 있는 사람들</h2>
+      {nowLoading && <p>불러오는 중...</p>}
+      {nowFeed.length === 0 && !nowLoading && <p>주변에서 듣는 사람이 없어요 🎵</p>}
+
+      <div style={{ marginTop: 12 }}>
+        {nowFeed.map((n, i) => (
+          <div
+            key={i}
+            style={{
+              background: "#f8f8f8",
+              borderRadius: 12,
+              padding: "12px 16px",
+              marginBottom: 10,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {n.albumArt && (
+                <img
+                  src={n.albumArt}
+                  alt={n.title}
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 8,
+                    objectFit: "cover",
+                  }}
+                />
+              )}
+              <div>
+                <div>
+                  🎵 <b>{n.userName || "익명 사용자"}</b>(이)가{" "}
+                  <span style={{ color: "#0077cc" }}>
+                    {(n.distance / 1000).toFixed(1)}km
+                  </span>{" "}
+                  근처에서
+                </div>
+                <div>
+                  <b>「{n.title}」</b> — {n.artist} 듣는 중 🎧
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
