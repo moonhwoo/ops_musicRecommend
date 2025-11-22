@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import json
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple,Optional
 
 import difflib
 from dotenv import load_dotenv
@@ -142,8 +142,10 @@ def analyze_text_logic(
 SYSTEM_PROMPT_MUSIC = """
 너는 한국어로 대답하는 음악 추천 큐레이터야.
 
-입력으로 한 사용자의 감정 분석 결과 JSON이 주어진다.
-JSON 구조는 대략 다음과 같다:
+입력으로 한 사용자의 감정 분석 결과 JSON과
+그 사용자의 음악 취향 정보(user_profile)가 함께 주어진다.
+
+emotion 구조는 대략 다음과 같다:
 
 {
   "mood_top1_ko": string,
@@ -157,19 +159,50 @@ JSON 구조는 대략 다음과 같다:
   "weights": [[string, float], ...]
 }
 
+user_profile의 구조는 대략 다음과 같다:
+{
+  "user_id": int,
+  "novelty_score": int | null,          // 0~10, 새 아티스트/곡 선호도
+  "preferred_year_category": string | null, // "1990s", "2000s", "2010s", "ALL" 등
+  "favorite_genres": [string, ...],     // 사용자가 좋아하는 장르명
+  "favorite_artists": [                 // 1~3위 선호 아티스트
+    {"rank": 1, "name": "...", "spotify_id": "..."},
+    ...
+  ]
+}
+
 너의 역할:
-- 감정 정보와 키워드를 보고 사용자의 현재 분위기와 상황을 이해한다.
-- 한국 사용자에게 어울리는 곡 10개를 추천한다.
+- 감정(emotion) 정보와 키워드, 그리고 user_profile을 함께 보고
+  사용자의 현재 분위기와 평소 취향을 동시에 고려해서 곡을 추천한다.
+- 한국 사용자에게 어울리는 곡 15개를 추천한다.
+
+취향(user_profile) 반영 규칙:
+1. novelty_score가 높을수록 (7 이상) 새로운 아티스트/곡 비중을 늘려라.
+   novelty_score가 낮을수록 (3 이하) 대중적이고 많이 알려진 곡 위주로 선택하라.
+
+2. favorite_genres에 포함된 장르를 우선 고려하되,
+   한 장르만 반복하지 말고 전체 15곡 중 최소 2~3개 장르를 섞어라.
+
+3. favorite_artists에 있는 가수의 곡을 적당히 섞되,
+   전체를 그 가수로만 채우지는 말아라(3곡 정도만).
+
+4. preferred_year_category가 특정 시대("1990s", "2000s" 등)라면,
+   가능한 한 그 시대 곡을 중심으로 추천하되,
+   분위기에 맞는 다른 시대 곡도 일부 섞어서 다양성을 유지하라.
+
+5. 감정(emotion)의 weights, keywords를 최우선으로 반영하되,
+   user_profile과 균형 있게 섞어라
 
 규칙:
-1. 곡은 실제로 존재하는 10곡만 추천한다.
+1. 곡은 실제로 존재하는 15곡만 추천한다.
 2. 각 곡은 아래 필드를 반드시 포함해야 한다.
    - "title": 곡 제목 (문자열)
    - "artist": 아티스트 이름 (문자열)
    - "reason": 이 곡을 추천한 이유 (한국어 1~2문장)
    - "mood_tags": 감정/분위기와 관련된 태그 리스트
    - "match_score": 0.0~1.0 사이의 수치
-3. 감정(특히 weights 정보)과 keywords를 적극 반영해 분위기가 잘 맞는 곡을 고른다.
+3. 감정과 취향에 따라 추천 곡을 구성하고,
+   장르·아티스트·분위기를 다양하게 구성하라.
 4. 한국 사용자에게 너무 생소하지 않은 곡 위주로 추천한다.
 5. 곡들은 아티스트/분위기를 적당히 다양하게 구성한다.
 6. 응답은 반드시 JSON 형식의 객체 하나만 포함해야 한다.
@@ -192,7 +225,10 @@ JSON 구조는 대략 다음과 같다:
 """.strip()
 
 
-def recommend_songs_via_openai_logic(analysis_json: str) -> List[Dict[str, Any]]:
+def recommend_songs_via_openai_logic(
+    analysis_json: str,
+    user_profile: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
     """
     감정 분석 결과(analysis_json)를 기반으로 곡 추천 리스트를 반환.
     반환값: [{"title": ..., "artist": ..., "reason": ..., ...}, ...]
@@ -214,16 +250,19 @@ def recommend_songs_via_openai_logic(analysis_json: str) -> List[Dict[str, Any]]
 
     info["weights"] = weights
 
-    payload = {"emotion": info}
+    payload = {
+        "emotion": info,
+        "user_profile": user_profile or {},
+        }
 
     user_prompt_ko = f"""
-다음은 한 사용자의 감정 분석 정보야.
+다음은 한 사용자의 감정 분석 정보와 평소 음악 취향 정보야.
 이 정보를 기반으로 위에서 설명한 규칙과 출력 형식을 지켜서 곡을 추천해라.
 
 [사용자 원문]
 {text}
 
-[감정 및 키워드 JSON]
+[emotion + user_profile JSON]
 {json.dumps(payload, ensure_ascii=False)}
 """.strip()
 
