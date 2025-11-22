@@ -1,4 +1,4 @@
 CREATE TABLE genres (
     genre_id INT PRIMARY KEY AUTO_INCREMENT,
     genre_name VARCHAR(50) NOT NULL UNIQUE
-);
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

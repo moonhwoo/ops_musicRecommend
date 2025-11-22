@@ -1,5 +1,6 @@
 # chatbot/mcp/server/server.py
 # -*- coding: utf-8 -*-
+from .user_profile import load_user_profile
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
@@ -150,26 +151,41 @@ def chat_endpoint(req: ChatRequest) -> ChatResponse:
         return ChatResponse(
             reply="메시지가 비어 있어요. 지금 기분이나 상황을 한 번 적어줄래요?"
         )
-
+    # 0) user_id를 정수로 변환 (설문 DB의 users.user_id 기준)  # [추가]
+    numeric_user_id: Optional[int] = None  
+    if req.user_id:  
+        try:  
+            numeric_user_id = int(req.user_id)  
+        except ValueError:  
+            numeric_user_id = None  
+    
     # 1) 감정/키워드 분석
     mood_dict, kw_spans, analysis_json, keywords_csv, raw_text = analyze_text_logic(
         user_text
     )
+    
+    # 1-1) 설문 기반 user_profile 로드 (있으면)  # [추가]
+    user_profile = None  
+    if numeric_user_id is not None:  
+        user_profile = load_user_profile(numeric_user_id)
 
     # 2) 추천 + Spotify 링크
-    songs = recommend_songs_via_openai_logic(analysis_json)
+    songs = recommend_songs_via_openai_logic(
+        analysis_json,
+        user_profile=user_profile,  
+    )
     songs_with_links = attach_spotify_links_logic(songs, min_valid=4)
 
     if not songs_with_links:
         reply_text = (
             "지금은 잘 맞는 곡을 찾지 못했어요. "
-            "조금만 더 자세히 마음이나 상황을 써주면 더 잘 찾아볼게요."
+            "조금만 더 자세히 마음이나 상황을 써주면 더 잘 찾아볼게요 ."
         )
         save_chat_log(
             user_text=user_text,
             reply=reply_text,
             user_id=req.user_id,
-            meta={"mood": mood_dict, "keywords_csv": keywords_csv},
+            meta={"mood": mood_dict, "keywords_csv": keywords_csv,"user_profile": user_profile,},
         )
         return ChatResponse(reply=reply_text)
 
@@ -209,6 +225,7 @@ def chat_endpoint(req: ChatRequest) -> ChatResponse:
             "mood": mood_dict,
             "keywords_csv": keywords_csv,
             "songs": songs_with_links,
+            "user_profile": user_profile,
         },
     )
 
