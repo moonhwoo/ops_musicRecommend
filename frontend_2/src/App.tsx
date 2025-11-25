@@ -10,7 +10,7 @@ export default function App() {
   return (
     <div style={{ maxWidth: 680, margin: '20px auto', padding: 16 }}>
       <nav style={{ marginBottom: 16 }}>
-        <Link to="/login">로그인</Link> | <Link to="/survey">설문</Link> | <Link to="/main">메인</Link> | <Link to="/chat">텍스트 챗봇</Link> | <Link to="/Nearby">위치 기반 음악 추천</Link>
+        <Link to="/login">로그인</Link> | <Link to="/survey">설문</Link> | <Link to="/main">메인</Link> | <Link to="/chat">텍스트 챗봇</Link> | <Link to="/nearby">위치 기반 음악 추천</Link>
       </nav>
 
 
