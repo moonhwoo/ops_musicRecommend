@@ -1,7 +1,22 @@
 import { useNavigate } from 'react-router-dom'
+import { useEffect } from 'react';
 
 export default function Survey() {
   const nav = useNavigate()
+
+  //스포티파이로그인-> 토큰과 userId 저장
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("access_token");
+    const userId = params.get("user_id");
+    const name = params.get("display_name");
+
+    if (token && userId) {
+      localStorage.setItem("spotify_access_token", token);
+      localStorage.setItem("spotify_user_id", userId);
+      localStorage.setItem("spotify_display_name", name || "");
+    }
+  }, []);
 
   function skip() {
     // 설문 완료(혹은 건너뛰기) 플래그 — 다음 로그인 땐 메인으로 직행

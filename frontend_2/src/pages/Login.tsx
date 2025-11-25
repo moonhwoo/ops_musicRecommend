@@ -39,6 +39,12 @@ export default function Login() {
     }
   }
 
+  //스포티파이 로그인
+  const handleSpotifyLogin = () => {
+    window.location.href = 'http://127.0.0.1:4000/login'
+  }
+
+
   return (
     <div style={{ maxWidth: 360, margin: '60px auto' }}>
       <h1>로그인</h1>
@@ -57,6 +63,22 @@ export default function Login() {
       <p style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
         데모: <b>demo / pass1234</b>
       </p>
+      <hr style={{ margin: '24px 0', opacity: 0.3 }} />
+      <button
+        onClick={handleSpotifyLogin}
+        style={{
+          width: '100%',
+          background: '#1DB954',
+          color: '#fff',
+          padding: '10px 16px',
+          fontSize: 16,
+          borderRadius: 999,
+          border: 'none',
+          cursor: 'pointer',
+        }}
+      >
+        🎧 Spotify로 로그인
+      </button>
     </div>
   )
 }

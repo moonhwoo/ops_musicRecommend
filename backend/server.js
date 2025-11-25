@@ -161,7 +161,7 @@ app.get("/callback", async (req, res) => {
   //global.spotifyUserId = meData.id;
 
   // ✅ 토큰/유저ID를 프론트에 쿼리파라미터로 넘기기
-  const redirectUrl = new URL(`${process.env.FRONTEND_URL}/app`);
+  const redirectUrl = new URL(`${process.env.FRONTEND_URL}/survey`);
   redirectUrl.searchParams.set("access_token", tokenData.access_token);
   redirectUrl.searchParams.set("user_id", meData.id);
   redirectUrl.searchParams.set("display_name", meData.display_name || meData.id);
