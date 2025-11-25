@@ -24,7 +24,7 @@ type NowItem = {
 
 
 
-export default function Nearby() {
+export default function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -378,3 +378,5 @@ export default function Nearby() {
     </div>
   )
 }
+
+ 
