@@ -60,21 +60,11 @@ export default function Login() {
     }
   }
 
-  /** -----------------------------
-   *  (B) Spotify OAuth 시작
-   * -----------------------------
-   *  - OAuth 흐름에서는
-   *    1) 이 버튼 → 백엔드 /spotify/login 같은 URL로 이동
-   *    2) 백엔드에서 Spotify authorize URL로 리다이렉트
-   *    3) Spotify 로그인/동의 후 → 백엔드 callback
-   *    4) 백엔드가 토큰 발급받고, 프론트로 토큰/이름 전달
-   * ----------------------------- */
-  function handleSpotifyLogin() {
-    // TODO: 실제 백엔드 OAuth 시작 URL로 수정하기.
-    // 예시: http://localhost:4000/spotify/login
+  // Spotify OAuth 시작
+  const handleSpotifyLogin = () => {
     window.location.href = 'http://127.0.0.1:4000/login'
   }
-
+  
   return (
     <div style={{ maxWidth: 420, margin: '60px auto', display: 'grid', gap: 24 }}>
       {/* 1) 기존 앱 로그인          */}
