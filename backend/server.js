@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import User from "./models/User.js"
+
 dotenv.config();
 
 await mongoose.connect(process.env.MONGO_URI);
@@ -12,10 +14,10 @@ app.use(cors());
 app.use(express.json());
 
 
-import PlayLog from "./models/PlayLog.js"; 
+import PlayLog from "./models/PlayLog.js";
 
 
-//클라이언트가 곡 정보+위치를 직접 보내서 저장
+//클라이언트가 곡 정보+위치를 직접 보내서 저장 (수동저장)
 app.post("/api/playlog", async (req, res) => {
   try {
     const { trackId, title, artist, albumArt, playedAt, loc } = req.body;
@@ -33,7 +35,8 @@ app.post("/api/playlog", async (req, res) => {
       artist,
       albumArt,
       playedAt: new Date(playedAt),
-      loc: { type: "Point", coordinates: [loc.lng, loc.lat] }
+      loc: { type: "Point", coordinates: [loc.lng, loc.lat] },
+      source: "popular", //인기곡
     });
 
     res.json({ ok: true, log });
@@ -57,7 +60,7 @@ app.get("/api/stats/popular", async (req, res) => {
       return res.status(400).json({ error: "lat/lng required" });
     }
 
-   // ✅ 최근 N일 이내의 데이터만 사용
+    // ✅ 최근 N일 이내의 데이터만 사용
     const since = new Date(Date.now() - windowD * 24 * 60 * 60 * 1000);
 
     const pipeline = [
@@ -66,9 +69,12 @@ app.get("/api/stats/popular", async (req, res) => {
           near: { type: "Point", coordinates: [lng, lat] },
           distanceField: "distance",
           spherical: true,
-          maxDistance: radiusKm * 1000, 
-          query: { playedAt: { $gte: since } }
-        }
+          maxDistance: radiusKm * 1000,
+          query: { 
+            playedAt: { $gte: since },
+            source: "popular",
+          },
+        },
       },
       { $group: { _id: "$trackId", count: { $sum: 1 }, title: { $first: "$title" }, artist: { $first: "$artist" }, albumArt: { $first: "$albumArt" } } },
       { $sort: { count: -1 } },
@@ -144,27 +150,65 @@ app.get("/callback", async (req, res) => {
   const tokenData = await tokenResponse.json();
   if (!tokenData.access_token) {
     return res.status(400).send("토큰 발급 실패: " + JSON.stringify(tokenData));
-  }
+  } 
 
-  // ✅ 사용자 정보 가져오기
+  // ⭐ accessToken / refreshToken / expiresIn 변수 선언
+  const accessToken = tokenData.access_token;
+  const refreshToken = tokenData.refresh_token;
+  const expiresIn = tokenData.expires_in;
+  const expiresAt = new Date(Date.now() + expiresIn * 1000);
+
+  // 2️⃣ 사용자 정보 가져오기
   const meResponse = await fetch("https://api.spotify.com/v1/me", {
-    headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    headers: { Authorization: `Bearer ${accessToken}` }
   });
   const meData = await meResponse.json();
 
-  // ✅ 토큰 및 사용자 정보 전역 저장 (임시)
-  global.spotifyAccessToken = tokenData.access_token;
-  global.spotifyUserId = meData.id;
+  const spotifyUserId = meData.id;
+  const displayName = meData.display_name || spotifyUserId;
+  const email = meData.email || null;
 
-  console.log("✅ Spotify 로그인 성공:", meData.display_name || meData.id);
+  // ⭐ User를 DB에 upsert
+  await User.findOneAndUpdate(
+    { spotify_user_id: spotifyUserId }, 
+    {
+      spotify_user_id: spotifyUserId,
+      display_name: displayName,
+      email,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_expires_at: expiresAt,
+    },
+    { new: true, upsert: true }
+  );
+  const user = await User.findOneAndUpdate(
+  { spotify_user_id: spotifyUserId }, 
+  {
+    spotify_user_id: spotifyUserId,
+    display_name: displayName,
+    email,
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_expires_at: expiresAt,
+  },
+  { new: true, upsert: true }
+);
 
-  // ✅ 로그인 성공 시 프론트엔드 /app 으로 리다이렉트
-  res.redirect(`${process.env.FRONTEND_URL}/app`);
+  let redirectPath = user.hasSurvey ? "/main" : "/survey";
 
+  console.log("✅ User upserted:", spotifyUserId, displayName);
+
+  // 프론트로 redirect
+ const redirectUrl = new URL(`${process.env.FRONTEND_URL}${redirectPath}`);
+redirectUrl.searchParams.set("access_token", accessToken);
+redirectUrl.searchParams.set("user_id", spotifyUserId);
+redirectUrl.searchParams.set("display_name", displayName);
+
+return res.redirect(redirectUrl.toString());
 });
 
 
-// 3️⃣ 현재 재생 중인 곡 정보
+// 현재 재생 중인 곡 정보
 app.get("/currently-playing", async (req, res) => {
   if (!global.spotifyAccessToken) {
     return res.status(400).send("⚠️ 먼저 /login 으로 로그인하세요");
@@ -210,26 +254,149 @@ app.get("/currently-playing", async (req, res) => {
   }
 });
 
-//현재 재생곡 저장
+// 현재 재생곡 저장 (버튼용: 인기곡 기록)
 app.post("/currently-playing", async (req, res) => {
-  if (!global.spotifyAccessToken) {
+  const { lat, lng, accessToken, userId } = req.body;
+
+  if (!accessToken || !userId)
+    return res.status(400).json({ ok: false, error: "missing_token" });
+
+  if (!lat || !lng)
+    return res.status(400).json({ ok: false, error: "missing_location" });
+
+  // Spotify 현재 재생곡 요청
+  const apiResponse = await fetch(
+    "https://api.spotify.com/v1/me/player/currently-playing",
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  const data = await apiResponse.json();
+
+  if (!data || !data.is_playing || !data.item)
+    return res.json({ ok: false, message: "현재 재생 중인 곡 없음" });
+
+  const trackId = data.item.uri;
+  const title = data.item.name;
+  const artist = data.item.artists.map((a) => a.name).join(", ");
+  const albumArt = data.item.album.images[0]?.url;
+  const playedAt = new Date();
+
+  try {
+    const log = await PlayLog.create({
+      userId: userId,
+      trackId,
+      title,
+      artist,
+      albumArt,
+      playedAt,
+      loc: { type: "Point", coordinates: [lng, lat] },
+      source: "popular", // 인기곡
+    });
+
+    return res.json({ ok: true, log });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ ok: false, error: "db_error" });
+  }
+});
+
+
+
+//반경 2km 이내에서 최근 2분 안에 재생된 곡들을 유저당 1건씩 가져옵니다. (실시간 공유용)
+app.get("/api/now/nearby", async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat);
+    const lng = parseFloat(req.query.lng);
+    const radiusKm = Math.min(parseFloat(req.query.radius_km) || 2, 20);
+    const windowSec = Math.min(parseInt(req.query.window_s || "120", 10), 600);
+    const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
+
+    if (!isFinite(lat) || !isFinite(lng)) {
+      return res.status(400).json({ error: "lat/lng required" });
+    }
+
+    const since = new Date(Date.now() - windowSec * 1000);
+
+    const pipeline = [
+      {
+        $geoNear: {
+          near: { type: "Point", coordinates: [lng, lat] },
+          distanceField: "distance",
+          spherical: true,
+          maxDistance: radiusKm * 1000,
+          query: {
+            playedAt: { $gte: since },
+            source: "live", // ✅ 실시간 공유로 저장된 것만
+          },
+        },
+      },
+      { $sort: { userId: 1, playedAt: -1 } },
+      {
+        $group: {
+          _id: "$userId",
+          doc: { $first: "$$ROOT" },
+        },
+      },
+      { $replaceRoot: { newRoot: "$doc" } },
+      { $sort: { playedAt: -1 } },
+      { $limit: limit },
+      {
+        $project: {
+          _id: 0,
+          userId: 1,
+          userName: 1, 
+          trackId: 1,
+          title: 1,
+          artist: 1,
+          albumArt: 1,
+          playedAt: 1,
+          distance: 1,
+          loc: 1,
+        },
+      },
+    ];
+
+    const items = await PlayLog.aggregate(pipeline).allowDiskUse(true);
+    res.json({ center: { lat, lng }, total: items.length, items });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "server_error" });
+  }
+});
+
+
+
+// ✅ 위치공유용: 실시간으로 듣는 노래 기록 (인기곡에는 반영 X)
+app.post("/live/now", async (req, res) => {
+  const { lat, lng, accessToken, userId, userName} = req.body;
+
+  // 프론트에서 받은 토큰/유저ID 검사
+  if (!accessToken || !userId) {
     return res.status(400).json({
       ok: false,
-      error: "no_token",
-      message: "⚠️ 먼저 /login 으로 로그인하세요"
+      error: "missing_token_or_user",
+      message: "accessToken 또는 userId 누락됨",
     });
   }
 
-  const { lat, lng } = req.body;
-  if (!lat || !lng) return res.status(400).json({ error: "위치 정보 누락" });
+  if (!lat || !lng) {
+    return res.status(400).json({ ok: false, error: "no_location" });
+  }
 
+  // Spotify 현재 재생곡 API 호출 (프론트의 token 사용!)
   const apiResponse = await fetch(
     "https://api.spotify.com/v1/me/player/currently-playing",
-    { headers: { Authorization: `Bearer ${global.spotifyAccessToken}` } }
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
   );
+
   const data = await apiResponse.json();
 
-  if (!data.item) return res.json({ message: "현재 재생 중인 곡 없음" });
+  // 재생 중이 아닐 때는 저장 안 함
+  if (!data || data.is_playing !== true || !data.item) {
+    return res.json({ ok: false, message: "현재 재생 중인 곡이 없습니다." });
+  }
 
   const trackId = data.item.uri;
   const title = data.item.name;
@@ -239,20 +406,80 @@ app.post("/currently-playing", async (req, res) => {
 
   try {
     const log = await PlayLog.create({
-      userId: global.spotifyUserId || "unknown-user",
+      userId, // ❗프론트에서 받은 userId 사용
+       userName: userName || "익명 사용자",
       trackId,
       title,
       artist,
       albumArt,
       playedAt,
-      loc: { type: "Point", coordinates: [lng, lat] }
+      loc: { type: "Point", coordinates: [lng, lat] },
+      source: "live", // 실시간 공유용
     });
-    res.json({ ok: true, log });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "DB 저장 실패" });
+
+    return res.json({ ok: true, log });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false, error: "db_error" });
   }
 });
+
+import SurveyResponse from "./models/SurveyResponse.js";
+
+app.post("/api/survey/submit", async (req, res) => {
+  try {
+    const { user_id, answers } = req.body;
+
+    if (!user_id || !answers) {
+      return res.status(400).json({ ok: false, error: "missing_fields" });
+    }
+
+    await SurveyResponse.create({
+      user_id,
+      novelty: answers.novelty,
+      yearCategory: answers.yearCategory,
+      genres: answers.genres,
+      favorite_artists: answers.favorite_artists,
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Survey save error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+
+// 설문 제출
+app.post("/api/survey", async (req, res) => {
+  try {
+    const { user_id, novelty, yearCategory, genres, favorite_artists } = req.body;
+
+    await SurveyResponse.create({
+      user_id,
+      novelty,
+      yearCategory,
+      genres,
+      favorite_artists,
+    });
+
+    // 🔥 설문 완료 처리
+    await User.findOneAndUpdate(
+      { spotify_user_id: user_id },
+      { hasSurvey: true }
+    );
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false });
+  }
+});
+
+
+
+
+
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

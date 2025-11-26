@@ -23,8 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# API 파일 무시
-.env
+# 개인키 파일 무시
+.env.*.local
 .env.local
-.env.development
-.env.production

@@ -1,19 +1,38 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { useNavigate } from 'react-router-dom'   
+import { useNavigate } from 'react-router-dom'
 
 type Msg = { role: 'user' | 'assistant'; content: string }
 
-const CHAT_API_URL = import.meta.env.VITE_CHAT_API_URL as string | undefined
+type Song = {
+  title: string
+  artist: string
+  reason: string
+  link?: string
+  preview_url?: string
+  track_id?: string
+  uri?: string
+  embed_url?: string
+}
+
+type ChatApiResponse = {
+  reply: string
+  songs?: Song[]
+}
+
+const CHAT_API_URL = 'http://127.0.0.1:8000/chat'
 
 export default function TextChat() {
   const [input, setInput] = useState('')
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [sending, setSending] = useState(false)
-  const viewportRef = useRef<HTMLDivElement>(null)
-  const nav = useNavigate()                     
+  const [songs, setSongs] = useState<Song[]>([])
+  const [selectedSongIdx, setSelectedSongIdx] = useState<number | null>(null)
 
-  // 스크롤 항상 마지막 메시지로
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+  const nav = useNavigate()
+
+  // 항상 마지막 메시지로 스크롤
   useEffect(() => {
     const el = viewportRef.current
     if (!el) return
@@ -23,114 +42,288 @@ export default function TextChat() {
   async function onSend() {
     const text = input.trim()
     if (!text || sending) return
+
     setInput('')
 
-    const nextMsgs: Msg[] = [...msgs, { role: 'user' as const, content: text }]
+    const nextMsgs: Msg[] = [...msgs, { role: 'user', content: text }]
     setMsgs(nextMsgs)
     setSending(true)
 
     try {
-      const reply = await getReply(text, nextMsgs)
-      setMsgs((m) => [...m, { role: 'assistant' as const, content: reply }])
+      const { reply, songs: newSongs } = await getReply(text, nextMsgs)
+
+      setMsgs((m) => [...m, { role: 'assistant', content: reply }])
+      setSongs(newSongs ?? [])
+      setSelectedSongIdx(newSongs && newSongs.length > 0 ? 0 : null)
     } catch (err) {
       console.error(err)
-      setMsgs((m) => [...m, { role: 'assistant' as const, content: '오류가 발생했습니다. 잠시 후 다시 시도해주세요.' }])
+      setMsgs((m) => [
+        ...m,
+        {
+          role: 'assistant',
+          content: '오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+        },
+      ])
     } finally {
       setSending(false)
     }
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.nativeEvent.isComposing) return;      // 한글 조합 중엔 무시
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       onSend()
     }
   }
 
-  function goHome() {                        
+  function goHome() {
     nav('/main')
   }
+
+  const selectedSong =
+    selectedSongIdx !== null && selectedSongIdx < songs.length
+      ? songs[selectedSongIdx]
+      : null
 
   return (
     <div
       style={{
         height: '100svh',
         display: 'grid',
-        gridTemplateRows: 'auto minmax(0,1fr) auto',
+        gridTemplateRows: 'auto minmax(0, 1fr) auto',
+        background: '#f3f4fb',
       }}
     >
       {/* 상단바 */}
-      <header style={{ borderBottom: '1px solid #eee', padding: '12px 16px', background: '#fff', display: 'flex', alignItems: 'center', gap: 12 }}>
+      <header
+        style={{
+          borderBottom: '1px solid #e2e2e2',
+          padding: '12px 16px',
+          background: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
         <button
           onClick={goHome}
           aria-label="메인으로"
           title="메인으로"
-          style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #ddd', background: '#f7f7f7', cursor: 'pointer' }}
+          style={{
+            padding: '6px 10px',
+            borderRadius: 8,
+            border: '1px solid #ddd',
+            background: '#f7f7f7',
+            cursor: 'pointer',
+          }}
         >
           ← 메인으로
         </button>
         <b>텍스트 챗봇</b>
-        <span style={{ color: '#666', marginLeft: 8 }}>/ 대화는 현재 세션에만 저장됩니다</span>
+        <span style={{ color: '#666', marginLeft: 8 }}>
+          / 대화는 현재 세션에만 저장됩니다
+        </span>
       </header>
 
-      {/* 대화 로그 */}
+      {/* 채팅 영역 + 추천곡 섹션 */}
       <main
-        // NOTE: main은 고정된 영역이며, 내부 logViewport만 스크롤 가능
         style={{
-          flex: 1,
-          background: '#fafafa',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'flex-end',
-          padding: '0 16px',
-          minHeight: 0,
+          display: 'grid',
+          gridTemplateRows: 'minmax(0, 3fr) minmax(0, 2fr)',
+          gap: 0,
         }}
       >
-        {/* 실제 스크롤/레이아웃 컨테이너 */}
+        {/* 대화 로그 */}
         <div
-          id="logViewport"
-          ref={viewportRef}        // 자동 스크롤 대상
           style={{
-            flexGrow: 1,          
-            overflowY: 'auto',
-            overflowX: 'hidden',   
-            display: 'flex',       
-            flexDirection: 'column',
-            gap: 8,
-            padding: '16px 0',      
+            background: '#f3f4fb',
+            padding: '0 16px',
+            minHeight: 0,
           }}
         >
-          {msgs.length === 0 ? (
-            <div style={{ color: '#888' }}>대화를 시작해보세요.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {msgs.map((m, i) => (
-                <div
-                  key={i}
+          <div
+            id="logViewport"
+            ref={viewportRef}
+            style={{
+              flexGrow: 1,
+              height: '100%',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              padding: '16px 0 24px',
+            }}
+          >
+            {msgs.length === 0 ? (
+              <div style={{ color: '#888', marginTop: 8 }}>
+                지금 기분이나 상황을 편하게 적어보면,
+                <br />
+                감정 분석 + 노래 추천을 함께 해줄게요.
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                {msgs.map((m, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                      maxWidth: '80%',
+                      width: 'fit-content',
+                      background: m.role === 'user' ? '#e3edff' : '#ffffff',
+                      border: '1px solid #e5e5e5',
+                      borderRadius: 14,
+                      padding: '10px 12px',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      lineHeight: 1.5,
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                    }}
+                  >
+                    {m.content}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 추천 곡 리스트 + Spotify 플레이어 */}
+        {songs.length > 0 && (
+          <section
+            style={{
+              borderTop: '1px solid #e2e2e2',
+              background: '#fdfdfd',
+              padding: '10px 16px 12px',
+              display: 'grid',
+              gridTemplateRows: 'minmax(0, 1.6fr) auto',
+              gap: 8,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 4,
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: 13,
+                  margin: 0,
+                  color: '#555',
+                }}
+              >
+                이번 대화에서 추천된 곡
+              </h3>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                maxHeight: 300,
+                overflowY: 'auto',
+              }}
+            >
+              {songs.map((s, idx) => (
+                <button
+                  key={`${s.title}-${idx}`}
+                  onClick={() => setSelectedSongIdx(idx)}
                   style={{
-                    alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-                    maxWidth: '80%',
-                    width: 'fit-content',
-                    background: m.role === 'user' ? '#e6f0ff' : '#fff',
-                    border: '1px solid #e5e5e5',
+                    textAlign: 'left',
+                    padding: 8,
                     borderRadius: 10,
-                    padding: '10px 12px',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    lineHeight: 1.5,
+                    border:
+                      idx === selectedSongIdx
+                        ? '1px solid #2f6bff'
+                        : '1px solid #e0e0e0',
+                    background:
+                      idx === selectedSongIdx ? '#eef3ff' : '#ffffff',
+                    cursor: 'pointer',
                   }}
                 >
-                  {m.content}
-                </div>
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      marginBottom: 2,
+                      fontSize: 13,
+                    }}
+                  >
+                    {s.title}{' '}
+                    <span style={{ color: '#777' }}>- {s.artist}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#555' }}>{s.reason}</div>
+                  {s.link && (
+                    <div style={{ marginTop: 2, fontSize: 11 }}>
+                      <a
+                        href={s.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          color: '#2f6bff',
+                          textDecoration: 'underline',
+                        }}
+                      >
+                        Spotify에서 열기
+                      </a>
+                    </div>
+                  )}
+                </button>
               ))}
             </div>
-          )}
-        </div>
+
+            {selectedSong && selectedSong.embed_url && (
+              <div
+                style={{
+                  marginTop: 4,
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  boxShadow: '0 4px 10px rgba(0,0,0,0.08)',
+                }}
+              >
+                <iframe
+                  src={selectedSong.embed_url}
+                  width="100%"
+                  height="80"
+                  frameBorder={0}
+                  allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                  loading="lazy"
+                />
+              </div>
+            )}
+          </section>
+        )}
       </main>
 
-      {/* 입력 영역: 입력창 + (우측) 보내기 버튼 */}
-      <footer style={{ borderTop: '1px solid #eee', padding: 12, background: '#fff', position: 'sticky', bottom: 0, zIndex: 10, }}>
-        <div style={{ display: 'flex', gap: 8, maxWidth: 960, margin: '0 auto' }}>
+      {/* 입력 영역 */}
+      <footer
+        style={{
+          borderTop: '1px solid #e2e2e2',
+          padding: 12,
+          background: '#fff',
+          position: 'sticky',
+          bottom: 0,
+          zIndex: 10,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            maxWidth: 960,
+            margin: '0 auto',
+          }}
+        >
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -156,9 +349,11 @@ export default function TextChat() {
               padding: '0 14px',
               borderRadius: 8,
               border: '1px solid #2c68ff',
-              background: sending || !input.trim() ? '#cdd9ff' : '#2f6bff',
+              background:
+                sending || !input.trim() ? '#cdd9ff' : '#2f6bff',
               color: '#fff',
-              cursor: sending || !input.trim() ? 'not-allowed' : 'pointer',
+              cursor:
+                sending || !input.trim() ? 'not-allowed' : 'pointer',
             }}
             title="보내기"
           >
@@ -170,28 +365,27 @@ export default function TextChat() {
   )
 }
 
-/** LLM 호출부: VITE_CHAT_API_URL이 있으면 호출, 없으면 규칙기반 더미 응답 */
-async function getReply(userText: string, history: Msg[]): Promise<string> {
-  if (!CHAT_API_URL) {
-    // 더미: 간단한 규칙 기반
-    if (/비|rain/i.test(userText)) return '비 오는 날엔 lofi나 재즈가 잘 어울려요 ☔'
-    if (/(신나|업비트|에너지|rock|edm)/i.test(userText)) return '업비트한 EDM/락 플레이리스트를 추천해요 🔊'
-    return `좋아요! "${userText}" 주제로 들을만한 곡을 찾아볼게요.`
-  }
-
-  // LLM 백엔드 예시
+async function getReply(
+  userText: string,
+  history: Msg[],
+): Promise<ChatApiResponse> {
   const payload = {
     messages: [
       ...history.map((m) => ({ role: m.role, content: m.content })),
       { role: 'user', content: userText },
     ],
   }
+
   const r = await fetch(CHAT_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  if (!r.ok) throw new Error(`Chat API error: ${r.status}`)
-  const j = (await r.json()) as { reply?: string }
-  return j.reply ?? '응답을 이해하지 못했어요.'
+
+  if (!r.ok) {
+    throw new Error(`Chat API error: ${r.status}`)
+  }
+
+  const j = (await r.json()) as ChatApiResponse
+  return j
 }

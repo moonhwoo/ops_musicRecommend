@@ -16,9 +16,15 @@ export function clearSession() {
   localStorage.removeItem('auth_token')
   localStorage.removeItem('auth_name')
 }
+// services/auth.ts
+
 export function isLoggedIn() {
-  return !!localStorage.getItem('auth_token')
+  const hasAppSession = !!localStorage.getItem('auth_token')
+  const hasSpotifyToken = !!localStorage.getItem('spotify_access_token')
+  return hasAppSession || hasSpotifyToken
 }
+
+
 export function currentUserName() {
   return localStorage.getItem('auth_name')
 }
