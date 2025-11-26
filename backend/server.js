@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import User from "./models/User.js"
+
 dotenv.config();
 
 await mongoose.connect(process.env.MONGO_URI);
@@ -148,26 +150,61 @@ app.get("/callback", async (req, res) => {
   const tokenData = await tokenResponse.json();
   if (!tokenData.access_token) {
     return res.status(400).send("토큰 발급 실패: " + JSON.stringify(tokenData));
-  }
+  } 
 
-  // ✅ 사용자 정보 가져오기
+  // ⭐ accessToken / refreshToken / expiresIn 변수 선언
+  const accessToken = tokenData.access_token;
+  const refreshToken = tokenData.refresh_token;
+  const expiresIn = tokenData.expires_in;
+  const expiresAt = new Date(Date.now() + expiresIn * 1000);
+
+  // 2️⃣ 사용자 정보 가져오기
   const meResponse = await fetch("https://api.spotify.com/v1/me", {
-    headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    headers: { Authorization: `Bearer ${accessToken}` }
   });
   const meData = await meResponse.json();
 
-  // global 사용안함
-  //global.spotifyAccessToken = tokenData.access_token;
-  //global.spotifyUserId = meData.id;
+  const spotifyUserId = meData.id;
+  const displayName = meData.display_name || spotifyUserId;
+  const email = meData.email || null;
 
-  // ✅ 토큰/유저ID를 프론트에 쿼리파라미터로 넘기기
-  const redirectUrl = new URL(`${process.env.FRONTEND_URL}/survey`);
-  redirectUrl.searchParams.set("access_token", tokenData.access_token);
-  redirectUrl.searchParams.set("user_id", meData.id);
-  redirectUrl.searchParams.set("display_name", meData.display_name || meData.id);
+  // ⭐ User를 DB에 upsert
+  await User.findOneAndUpdate(
+    { spotify_user_id: spotifyUserId }, 
+    {
+      spotify_user_id: spotifyUserId,
+      display_name: displayName,
+      email,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_expires_at: expiresAt,
+    },
+    { new: true, upsert: true }
+  );
+  const user = await User.findOneAndUpdate(
+  { spotify_user_id: spotifyUserId }, 
+  {
+    spotify_user_id: spotifyUserId,
+    display_name: displayName,
+    email,
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_expires_at: expiresAt,
+  },
+  { new: true, upsert: true }
+);
 
-  res.redirect(redirectUrl.toString());
+  let redirectPath = user.hasSurvey ? "/main" : "/survey";
 
+  console.log("✅ User upserted:", spotifyUserId, displayName);
+
+  // 프론트로 redirect
+ const redirectUrl = new URL(`${process.env.FRONTEND_URL}${redirectPath}`);
+redirectUrl.searchParams.set("access_token", accessToken);
+redirectUrl.searchParams.set("user_id", spotifyUserId);
+redirectUrl.searchParams.set("display_name", displayName);
+
+return res.redirect(redirectUrl.toString());
 });
 
 
@@ -387,6 +424,57 @@ app.post("/live/now", async (req, res) => {
   }
 });
 
+import SurveyResponse from "./models/SurveyResponse.js";
+
+app.post("/api/survey/submit", async (req, res) => {
+  try {
+    const { user_id, answers } = req.body;
+
+    if (!user_id || !answers) {
+      return res.status(400).json({ ok: false, error: "missing_fields" });
+    }
+
+    await SurveyResponse.create({
+      user_id,
+      novelty: answers.novelty,
+      yearCategory: answers.yearCategory,
+      genres: answers.genres,
+      favorite_artists: answers.favorite_artists,
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Survey save error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+
+// 설문 제출
+app.post("/api/survey", async (req, res) => {
+  try {
+    const { user_id, novelty, yearCategory, genres, favorite_artists } = req.body;
+
+    await SurveyResponse.create({
+      user_id,
+      novelty,
+      yearCategory,
+      genres,
+      favorite_artists,
+    });
+
+    // 🔥 설문 완료 처리
+    await User.findOneAndUpdate(
+      { spotify_user_id: user_id },
+      { hasSurvey: true }
+    );
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false });
+  }
+});
 
 
 
