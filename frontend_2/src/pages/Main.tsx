@@ -2,8 +2,24 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getWeatherByCoords, reverseGeocode, iconUrl, type WeatherNow } from '../services/weather'
 
+type Song = {
+  title: string
+  artist: string
+  reason: string
+  trackId?: string   
+  link?: string      
+  preview_url?: string
+  albumArt?: string
+  embed_url?: string
+}
+
+
 export default function Main() {
   const nav = useNavigate()
+
+  const [songs, setSongs] = useState<Song[]>([])
+  const [songsError, setSongsError] = useState<string | null>(null)
+  const [songsLoading, setSongsLoading] = useState(false)
 
   const [city, setCity] = useState('현재 위치')
   const [weather, setWeather] = useState<WeatherNow | null>(null)
@@ -28,6 +44,34 @@ export default function Main() {
           ])
           setCity(cityName)
           setWeather(w)
+
+          // 날씨 기반 노래 추천 API 호출
+          try {
+            setSongsLoading(true)
+            setSongsError(null)
+
+            const resp = await fetch('http://localhost:4000/api/weather-recommend', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                city: cityName,
+                weather: w, // { temp, wind, clouds, precip ... }
+              }),
+            })
+
+            if (!resp.ok) {
+              throw new Error(`weather-recommend error: ${resp.status}`)
+            }
+
+            const data = await resp.json()
+            setSongs(data.songs ?? [])
+          } catch (e) {
+            console.error(e)
+            setSongsError('추천곡을 불러오지 못했습니다.')
+          } finally {
+            setSongsLoading(false)
+          }
+
         } catch (e) {
           console.error(e)
           setError('날씨 정보를 불러오지 못했습니다.')
@@ -40,6 +84,7 @@ export default function Main() {
       { enableHighAccuracy: false, maximumAge: 60_000 }
     )
   }, [])
+
 
   function goTextChat() {
     nav('/chat')
@@ -72,6 +117,51 @@ export default function Main() {
           <p>날씨를 불러오는 중…</p>
         )}
       </section>
+      
+      <section style={{ border: '1px solid #eee', borderRadius: 12, padding: 16 }}>
+        <h2 style={{ marginTop: 0 }}>🎵 오늘 날씨에 어울리는 노래</h2>
+
+        {songsLoading && <p>추천곡을 불러오는 중…</p>}
+        {songsError && <p style={{ color: 'crimson' }}>{songsError}</p>}
+
+        {!songsLoading && !songsError && songs.length === 0 && (
+          <p>추천곡이 아직 없습니다.</p>
+        )}
+        {songs.length > 0 && (
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+            {songs.map((s, idx) => (
+              <li
+                key={s.trackId ?? idx}
+                style={{
+                  borderRadius: 10,
+                  border: '1px solid #f0f0f0',
+                  padding: 10,
+                  fontSize: 14,
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>
+                  {idx + 1}. {s.title} - {s.artist}
+                </div>
+                <div style={{ color: '#555' }}>{s.reason}</div>
+
+                {s.embed_url && (
+                  <div style={{ marginTop: 8 }}>
+                    <iframe
+                      src={s.embed_url}
+                      width="100%"
+                      height="80"
+                      style={{ borderRadius: 8, border: 'none' }}
+                      allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                      loading="lazy"
+                    />
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
 
       {/* 오른쪽 하단 플로팅 액션들 */}
       {/* 공통 스타일: 툴팁 가능한 버튼 래퍼 */}
