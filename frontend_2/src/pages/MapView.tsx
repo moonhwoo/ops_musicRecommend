@@ -1,6 +1,7 @@
 import 'leaflet/dist/leaflet.css';
-import { MapContainer, TileLayer, Circle, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Circle, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
+import { useEffect } from "react";
 
 
 
@@ -19,13 +20,48 @@ type Props = {
   nowFeed: NowPoint[];
 };
 
+// 자동 줌 조절
+
+function AutoZoom({ center, radiusKm }: { center: [number, number], radiusKm: number }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const [lat, lng] = center;
+    const radiusM = radiusKm * 1000; // km → m
+
+    // 1도(위도) ≈ 111.32km → meter 단위 변환
+    const latOffset = radiusM / 111320;
+    const lngOffset = radiusM / (111320 * Math.cos((lat * Math.PI) / 180));
+
+    // Bound 생성
+    const bounds: L.LatLngBoundsLiteral = [
+      [lat - latOffset, lng - lngOffset],
+      [lat + latOffset, lng + lngOffset]
+    ];
+
+    map.fitBounds(bounds, { padding: [30, 30] });
+
+  }, [center, radiusKm, map]);
+
+  return null;
+}
+
 export default function MapView({ pos, radiusKm, nowFeed }: Props) {
   if (!pos) return <p>지도 로딩 중...</p>;
 
   // 내 위치 표시 아이콘
-  const myIcon = L.icon({
-    iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
-    iconSize: [32, 32],
+  const myIcon = L.divIcon({
+    html: `
+    <div style="
+      width: 14px;
+      height: 14px;
+      background: #007aff;
+      border-radius: 50%;
+      border: 3px solid white;
+      box-shadow: 0 0 8px rgba(0,122,255,0.4);
+    "></div>`,
+    className: "",
+    iconSize: [20, 20]
   });
 
   // 다른 사람 아이콘
@@ -37,13 +73,16 @@ export default function MapView({ pos, radiusKm, nowFeed }: Props) {
   return (
     <MapContainer
       center={[pos.lat, pos.lng]}
-      zoom={15}
-      style={{ height: "400px", width: "100%", borderRadius: 12 }}
+      zoom={15} //AutoZoom이 덮어씀
+      style={{ height: "400px", width: "100%", borderRadius: "18px", overflow: "hidden", boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
     >
       <TileLayer
         attribution='&copy; OpenStreetMap'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        url="https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png"
       />
+
+      {/* 반경 자동 줌 */}
+      <AutoZoom center={[pos.lat, pos.lng]} radiusKm={radiusKm} />
 
       {/* 내 위치 */}
       <Marker position={[pos.lat, pos.lng]} icon={myIcon}>
