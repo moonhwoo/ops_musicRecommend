@@ -1,77 +1,81 @@
+# server/user_profile.py
+
 from typing import Any, Dict, List
 
-from sqlalchemy import text
-from database.database import SessionLocal
+from database.database import get_db
 
-def load_user_profile(user_id: int) -> Dict[str, Any]:
+
+def load_user_profile(spotify_user_id: str) -> Dict[str, Any]:
     """
-    MySQL에서 설문/선호 정보를 읽어와서
-    LLM 프롬프트에 넣기 좋은 dict로 변환.
+    MongoDB의 users, surveyresponses 컬렉션에서
+    해당 Spotify 유저의 정보를 읽어와 LLM 프롬프트용 dict로 변환한다.
+
+    spotify_user_id: 예) "31xjzjfhw..." 같은 문자열
     """
-    db = SessionLocal()
-    try:
-        # 1) 기본 선호 (novelty_score, preferred_year_category)
-        pref_row = db.execute(
-            text("""
-                SELECT novelty_score, preferred_year_category
-                FROM user_preferences
-                WHERE user_id = :uid
-            """),
-            {"uid": user_id},
-        ).fetchone()
 
-        if pref_row is None:
-            # 설문을 안 한 유저일 수도 있으니 기본값 리턴
-            return {
-                "user_id": user_id,
-                "novelty_score": None,
-                "preferred_year_category": None,
-                "favorite_genres": [],
-                "favorite_artists": [],
-            }
+    db = get_db()
 
-        novelty_score = pref_row.novelty_score
-        preferred_year_category = pref_row.preferred_year_category
+    users_col = db["users"]
+    surveys_col = db["surveyresponses"]
 
-        # 2) 선호 장르 이름 리스트
-        genre_rows = db.execute(
-            text("""
-                SELECT g.genre_name
-                FROM user_favorite_genres ufg
-                JOIN genres g ON ufg.genre_id = g.genre_id
-                WHERE ufg.user_id = :uid
-                ORDER BY g.genre_id
-            """),
-            {"uid": user_id},
-        ).fetchall()
-        favorite_genres: List[str] = [r.genre_name for r in genre_rows]
+    # 1) User 기본 정보
+    user_doc = users_col.find_one({"spotify_user_id": spotify_user_id})
 
-        # 3) 선호 아티스트 (1~3위)
-        artist_rows = db.execute(
-            text("""
-                SELECT artist_name, artist_spotify_id, artist_rank
-                FROM user_favorite_artists
-                WHERE user_id = :uid
-                ORDER BY artist_rank ASC
-            """),
-            {"uid": user_id},
-        ).fetchall()
+    # display_name, hasSurvey 같은 부가정보 (없으면 None/False)
+    display_name = user_doc.get("display_name") if user_doc else None
+    has_survey = user_doc.get("hasSurvey") if user_doc else False
 
-        favorite_artists: List[Dict[str, Any]] = [
-            {
-                "rank": r.artist_rank,
-                "name": r.artist_name,
-                "spotify_id": r.artist_spotify_id,
-            }
-            for r in artist_rows
-        ]
+    # 2) 설문 정보 (가장 최근 것 하나)
+    survey_doc = surveys_col.find_one(
+        {"user_id": spotify_user_id},
+        sort=[("created_at", -1)],
+    )
 
+    if survey_doc is None:
+        # 설문 안 했을 때 기본값
         return {
-            "user_id": user_id,
-            "novelty_score": novelty_score,
-            "preferred_year_category": preferred_year_category,
-            "favorite_genres": favorite_genres,
-            "favorite_artists": favorite_artists,
+            "user_id": spotify_user_id,
+            "display_name": display_name,
+            "has_survey": has_survey,
+            "novelty_score": None,
+            "preferred_year_category": None,
+            "favorite_genres": [],
+            "favorite_artists": [],
         }
-    finally:
-        db.close()
+
+    # Mongo 필드 → LLM용 필드 매핑
+    novelty_score = survey_doc.get("novelty")
+    preferred_year_category = survey_doc.get("yearCategory")
+    favorite_genres: List[str] = survey_doc.get("genres", [])
+
+    # favorite_artists는 문자열 배열 ["아이유","NewJeans", ...] 형태라고 가정
+    artist_names: List[str] = survey_doc.get("favorite_artists", [])
+
+    favorite_artists: List[Dict[str, Any]] = []
+    for idx, name in enumerate(artist_names, start=1):
+        favorite_artists.append(
+            {
+                "rank": idx,         # 0,1,2 순위
+                "name": name,
+                "spotify_id": None,  # 지금 Mongo에 없으므로 일단 None
+            }
+        )
+
+    return {
+        "user_id": spotify_user_id,
+        "display_name": display_name,
+        "has_survey": has_survey,
+        "novelty_score": novelty_score,
+        "preferred_year_category": preferred_year_category,
+        "favorite_genres": favorite_genres,
+        "favorite_artists": favorite_artists,
+    }
+
+'''
+테스트 부분
+
+if __name__ == "__main__":
+    test_id = "테스트할_spotify_user_id"
+    profile = load_user_profile(test_id)
+    print(profile)
+'''

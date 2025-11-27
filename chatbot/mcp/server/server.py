@@ -152,12 +152,12 @@ def chat_endpoint(req: ChatRequest) -> ChatResponse:
             reply="메시지가 비어 있어요. 지금 기분이나 상황을 한 번 적어줄래요?"
         )
     # 0) user_id를 정수로 변환 (설문 DB의 users.user_id 기준)  # [추가]
-    numeric_user_id: Optional[int] = None  
+    '''numeric_user_id: Optional[int] = None  
     if req.user_id:  
         try:  
             numeric_user_id = int(req.user_id)  
         except ValueError:  
-            numeric_user_id = None  
+            numeric_user_id = None   '''
     
     # 1) 감정/키워드 분석
     mood_dict, kw_spans, analysis_json, keywords_csv, raw_text = analyze_text_logic(
@@ -165,9 +165,10 @@ def chat_endpoint(req: ChatRequest) -> ChatResponse:
     )
     
     # 1-1) 설문 기반 user_profile 로드 (있으면)  # [추가]
-    user_profile = None  
-    if numeric_user_id is not None:  
-        user_profile = load_user_profile(numeric_user_id)
+    user_profile = None
+    if req.user_id:
+        # req.user_id 는 Spotify user id 문자열
+        user_profile = load_user_profile(req.user_id)
 
     # 2) 추천 + Spotify 링크
     songs = recommend_songs_via_openai_logic(
