@@ -1,4 +1,4 @@
-// src/MapView.tsx
+import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Circle, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 

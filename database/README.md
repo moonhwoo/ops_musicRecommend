@@ -84,7 +84,7 @@ mysql -u root -p ops_music_recommend < migrations/create_users.sql
 mysql -u root -p ops_music_recommend < migrations/create_genres.sql
 mysql -u root -p ops_music_recommend < migrations/create_survey.sql
 mysql -u root -p ops_music_recommend < migrations/create_playback.sql
-mysql -u root -p ops_music_recommend < migrations/seeds.sql
+mysql -u root -p ops_music_recommend < seeds/seeds.sql
 ```
 
 오류 없이 실행되면 테이블 및 기본 데이터 입력이 완료된 것입니다.
