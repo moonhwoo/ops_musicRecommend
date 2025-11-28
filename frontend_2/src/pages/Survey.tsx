@@ -1,50 +1,84 @@
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+
+const GENRES = [
+  'Pop',
+  '힙합',
+  '록',
+  '어쿠스틱/발라드',
+  '클래식/재즈',
+  'J-Pop',
+  '기타',
+]
+
+const YEAR_CATEGORY = ['1990s', '2000s', '2010s', '2020s', 'ALL']
 
 export default function Survey() {
-  const nav = useNavigate()
+  const [userId, setUserId] = useState<string | null>(null)
 
-  function skip() {
-    // 설문 완료(혹은 건너뛰기) 플래그 — 다음 로그인 땐 메인으로 직행
-    // localStorage.setItem('survey_done', '1')
-    nav('/main', { replace: true })
+  const [novelty, setNovelty] = useState<number>(5)
+  const [yearCategory, setYearCategory] = useState<string>('ALL')
+  const [genres, setGenres] = useState<string[]>([])
+  const [artists, setArtists] = useState<string>('')
+
+  useEffect(() => {
+    const uid =
+      localStorage.getItem('spotify_user_id') ||
+      localStorage.getItem('user_id')
+    if (uid) {
+      setUserId(uid)
+      localStorage.setItem('spotify_user_id', uid)
+    }
+  }, [])
+
+  const toggleGenre = (g: string) => {
+    setGenres((prev) =>
+      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g],
+    )
+  }
+
+  const submitSurvey = async () => {
+    if (!userId) {
+      alert('유저 정보가 없습니다. 다시 로그인해주세요.')
+      return
+    }
+
+    const res = await fetch('http://localhost:4000/api/survey', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: userId,
+        novelty,
+        yearCategory,
+        genres,
+        favorite_artists: artists,
+      }),
+    })
+
+    const data = await res.json()
+    if (data.ok) {
+      window.location.href = '/main'
+    } else {
+      alert('설문 저장 실패')
+    }
   }
 
   return (
-<<<<<<< Updated upstream
-    <div style={{ maxWidth: 720, margin: '40px auto', padding: 16 }}>
-      <h1>음악 취향 설문</h1>
-      <p style={{ color: '#555' }}>
-        지금은 로그인 후에, 간단한 취향 설문을 진행할 페이지
-        (백엔드 연동 전까지는 데이터 저장 X)
-      </p>
-
-      <div style={{ marginTop: 24, padding: 16, border: '1px dashed #ccc', borderRadius: 12 }}>
-        {/* 설문 폼 붙일 자리 */}
-        <p>여기에 설문 문항 UI가 들어갈 예정?</p>
-        <ul>
-          <li>예) 선호 장르(복수 선택)</li>
-        </ul>
-      </div>
-
-      <div style={{ marginTop: 24, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button onClick={skip} style={{ padding: '8px 14px' }}>
-          설문 건너뛰기
-=======
     <div className="min-h-screen w-full bg-[#121212] text-white">
       <div className="mx-auto flex max-w-4xl flex-col gap-10 px-4 pb-16 pt-20 md:px-8">
         <header className="text-center">
-          <h1 className="text-3xl font-bold text-[#1DB954] md:text-4xl">
-            음악 취향 설문조사
-          </h1>
+          <h1 className="text-2xl font-semibold">음악 취향 설문</h1>
+          <p className="mt-2 text-sm text-gray-400">
+            설문 결과는 날씨 기반 추천 + 텍스트 챗봇 추천에 함께 반영됩니다.
+          </p>
         </header>
 
-        <div className="space-y-10">
+        <div className="space-y-8">
           {/* Q1 */}
           <section className="rounded-2xl bg-[#181818] p-6 md:p-8">
-            <h2 className="text-2xl font-semibold mb-4">
+            <h2 className="mb-4 text-2xl font-semibold">
               Q1. 새로운 음악을 얼마나 좋아하시나요?
             </h2>
-            <p className="text-sm text-gray-400 mb-4">
+            <p className="mb-4 text-sm text-gray-400">
               (0 = 싫어함 ~ 10 = 매우 좋아함)
             </p>
 
@@ -56,88 +90,87 @@ export default function Survey() {
               onChange={(e) => setNovelty(Number(e.target.value))}
               className="w-full"
             />
-            <div className="text-right text-green-400 mt-2 text-lg">
+            <div className="mt-2 text-right text-sm text-emerald-300">
               {novelty} / 10
             </div>
           </section>
 
           {/* Q2 */}
           <section className="rounded-2xl bg-[#181818] p-6 md:p-8">
-            <h2 className="text-2xl font-semibold mb-6">
-              Q2. 주로 듣는 음악 시대는?
+            <h2 className="mb-4 text-2xl font-semibold">
+              Q2. 주로 어떤 시대 음악을 즐겨 들으시나요?
             </h2>
+            <p className="mb-4 text-sm text-gray-400">
+              가장 자주 듣는 시대를 선택해주세요.
+            </p>
 
-            <div className="flex flex-wrap gap-6 text-lg">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
               {YEAR_CATEGORY.map((y) => (
-                <label
+                <button
                   key={y}
-                  className="flex items-center gap-3 cursor-pointer"
+                  type="button"
+                  onClick={() => setYearCategory(y)}
+                  className={`rounded-xl border px-3 py-2 text-sm ${
+                    yearCategory === y
+                      ? 'border-emerald-500 bg-[#052e16] text-emerald-100'
+                      : 'border-[#27272f] bg-[#111827] text-gray-200'
+                  }`}
                 >
-                  <input
-                    type="radio"
-                    name="year"
-                    checked={yearCategory === y}
-                    onChange={() => setYearCategory(y)}
-                  />
-                  <span>{y}</span>
-                </label>
+                  {y}
+                </button>
               ))}
             </div>
           </section>
 
           {/* Q3 */}
           <section className="rounded-2xl bg-[#181818] p-6 md:p-8">
-            <h2 className="text-2xl font-semibold mb-6">
-              Q3. 좋아하는 음악 장르 (복수 선택)
+            <h2 className="mb-4 text-2xl font-semibold">
+              Q3. 자주 듣는 장르를 골라주세요.
             </h2>
+            <p className="mb-4 text-sm text-gray-400">
+              여러 개 선택 가능해요.
+            </p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-4 text-lg">
+            <div className="flex flex-wrap gap-3">
               {GENRES.map((g) => (
-                <label key={g} className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={genres.includes(g)}
-                    onChange={() => toggleGenre(g)}
-                  />
-                  <span>{g}</span>
-                </label>
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => toggleGenre(g)}
+                  className={`rounded-full border px-4 py-2 text-sm ${
+                    genres.includes(g)
+                      ? 'border-emerald-500 bg-[#052e16] text-emerald-100'
+                      : 'border-[#27272f] bg-[#111827] text-gray-200'
+                  }`}
+                >
+                  {g}
+                </button>
               ))}
             </div>
           </section>
 
           {/* Q4 */}
           <section className="rounded-2xl bg-[#181818] p-6 md:p-8">
-            <h2 className="text-2xl font-semibold mb-6">
-              Q4. 좋아하는 아티스트 1~3순위
+            <h2 className="mb-4 text-2xl font-semibold">
+              Q4. 자주 듣는 아티스트가 있다면 적어주세요.
             </h2>
-
-            {artists.map((a, idx) => (
-              <div key={idx} className="mb-6">
-                <label className="block mb-2 text-gray-300 text-lg">
-                  {idx + 1}순위 아티스트
-                </label>
-                <input
-                  className="w-full px-4 py-3 rounded-md text-lg"
-                  style={{ background: "#2A2A2A", color: "white" }}
-                  placeholder="아티스트 이름 입력"
-                  value={a}
-                  onChange={(e) => {
-                    const arr = [...artists];
-                    arr[idx] = e.target.value;
-                    setArtists(arr);
-                  }}
-                />
-              </div>
-            ))}
+            <p className="mb-4 text-sm text-gray-400">
+              예: Ado, YOASOBI, NewJeans ...
+            </p>
+            <textarea
+              className="min-h-[80px] w-full rounded-xl border border-[#27272f] bg-[#111827] p-3 text-sm text-gray-100"
+              value={artists}
+              onChange={(e) => setArtists(e.target.value)}
+              placeholder="자주 듣는 아티스트를 자유롭게 적어주세요."
+            />
           </section>
         </div>
 
         <button
-          className="mt-4 w-full rounded-lg bg-[#1DB954] py-4 text-lg font-semibold text-black hover:brightness-110"
+          className="mt-4 w-full rounded-lg bg-[#15803d] py-4 text-lg font-semibold text-emerald-50 hover:brightness-110"
           onClick={submitSurvey}
         >
           제출하기
->>>>>>> Stashed changes
         </button>
       </div>
     </div>

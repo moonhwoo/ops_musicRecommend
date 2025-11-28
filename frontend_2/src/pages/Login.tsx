@@ -22,7 +22,7 @@ export default function Login() {
 
   const nav = useNavigate()
   const loc = useLocation()
-  const navState = loc.state as NavState
+  const navState = (loc.state as NavState) ?? null
 
   const from = navState?.from || '/survey'
 
@@ -33,7 +33,9 @@ export default function Login() {
    * ----------------------------- */
   useEffect(() => {
     const name = localStorage.getItem('spotify_display_name')
-    if (name) setSpotifyName(name)
+    if (name) {
+      setSpotifyName(name)
+    }
   }, [])
 
    {/*  (A) 기존 앱 로그인 처리   */}
@@ -64,20 +66,18 @@ export default function Login() {
    *  (B) Spotify OAuth 시작
    * -----------------------------
    *  - OAuth 흐름에서는
-   *    1) 이 버튼 → 백엔드 /spotify/login 같은 URL로 이동
+   *    1) 이 버튼 → 백엔드/spotify/login 같은 URL로 이동
    *    2) 백엔드에서 Spotify authorize URL로 리다이렉트
    *    3) Spotify 로그인/동의 후 → 백엔드 callback
    *    4) 백엔드가 토큰 발급받고, 프론트로 토큰/이름 전달
    * ----------------------------- */
   function handleSpotifyLogin() {
-    // TODO: 실제 백엔드 OAuth 시작 URL로 수정하기.
-    // 예시: http://localhost:4000/spotify/login
     window.location.href = 'http://127.0.0.1:4000/login'
   }
 
   return (
     <div style={{ maxWidth: 420, margin: '60px auto', display: 'grid', gap: 24 }}>
-      {/* 1) 기존 앱 로그인          */}
+      {/* 1) 기존 앱 로그인 */}
       <section>
         <h1>앱 로그인</h1>
 
@@ -138,11 +138,11 @@ export default function Login() {
       {/* 2) Spotify OAuth 로그인   */}
       <section
         style={{
-          padding: 16,
-          borderRadius: 12,
-          border: '1px solid #eee',
-          background: '#121212',
-          color: '#fff',
+          padding: 24,
+          borderRadius: 16,
+          background: '#181818',
+          boxShadow: '0 12px 30px rgba(0,0,0,0.5)',
+          border: '1px solid #27272f',
         }}
       >
         <h2 style={{ marginTop: 0 }}>🎧 Spotify 연동</h2>
