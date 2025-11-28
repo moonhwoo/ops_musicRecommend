@@ -89,6 +89,16 @@ export default function Login() {
               onChange={(e) => setId(e.target.value)}
               placeholder="demo"
               autoComplete="username"
+              style={{
+                width: '100%',
+                marginTop: 4,
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px solid #444',
+                background: '#181818',
+                color: '#f9fafb',
+                fontSize: 14,
+              }}
             />
           </label>
 
@@ -100,6 +110,16 @@ export default function Login() {
               onChange={(e) => setPw(e.target.value)}
               placeholder="pass1234"
               autoComplete="current-password"
+              style={{
+                width: '100%',
+                marginTop: 4,
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px solid #444',
+                background: '#181818',
+                color: '#f9fafb',
+                fontSize: 14,
+              }}
             />
           </label>
 

@@ -2,6 +2,10 @@ import mongoose from "mongoose";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import User from "./models/User.js";
+import OpenAI from "openai";
+import crypto from "crypto";
+
 dotenv.config();
 
 await mongoose.connect(process.env.MONGO_URI);
@@ -50,7 +54,8 @@ app.get("/api/stats/popular", async (req, res) => {
   try {
     const lat = parseFloat(req.query.lat);
     const lng = parseFloat(req.query.lng);
-    const radiusKm = Math.min(parseFloat(req.query.radius_km) || 5, 50);
+    const rawRadius = parseFloat(req.query.radius_km) || 5;
+    const radiusKm = Math.min(Math.max(rawRadius, 0.01), 50);
     const windowD = Math.min(parseInt(req.query.window_d || "1", 10), 90); //최대 90일(3개월)
     const limit = Math.min(parseInt(req.query.limit || "10", 10), 50);
 
@@ -168,6 +173,15 @@ app.get("/callback", async (req, res) => {
 
   res.redirect(redirectUrl.toString());
 
+  console.log("✅ User upserted:", spotifyUserId, displayName);
+
+  // 프론트로 redirect
+ const redirectUrl = new URL(`${process.env.FRONTEND_URL}${redirectPath}`);
+redirectUrl.searchParams.set("access_token", accessToken);
+redirectUrl.searchParams.set("user_id", spotifyUserId);
+redirectUrl.searchParams.set("display_name", displayName);
+
+return res.redirect(redirectUrl.toString());
 });
 
 
@@ -270,7 +284,8 @@ app.get("/api/now/nearby", async (req, res) => {
   try {
     const lat = parseFloat(req.query.lat);
     const lng = parseFloat(req.query.lng);
-    const radiusKm = Math.min(parseFloat(req.query.radius_km) || 2, 20);
+    const rawRadius = parseFloat(req.query.radius_km) || 2;
+    const radiusKm = Math.min(Math.max(rawRadius, 0.01), 20);
     const windowSec = Math.min(parseInt(req.query.window_s || "120", 10), 600);
     const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
 
@@ -387,10 +402,86 @@ app.post("/live/now", async (req, res) => {
   }
 });
 
+// 설문 제출
+app.post("/api/survey", async (req, res) => {
+  try {
+    const { user_id, novelty, yearCategory, genres, favorite_artists } = req.body;
 
+    await SurveyResponse.create({
+      user_id,
+      novelty,
+      yearCategory,
+      genres,
+      favorite_artists,
+    });
 
+    // 🔥 설문 완료 처리
+    await User.findOneAndUpdate(
+      { spotify_user_id: user_id },
+      { hasSurvey: true }
+    );
 
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false });
+  }
+});
 
+// 🌤️ 오늘 날씨 기반 노래 추천
+app.post("/api/weather-recommend", async (req, res) => {
+  try {
+    const { city, weather } = req.body;
+    // weather: { temp, wind, clouds, precip }
+
+    if (!weather || typeof weather.temp !== "number") {
+      return res.status(400).json({ error: "weather_required" });
+    }
+
+    const prompt = `
+지금 나는 ${city || "어느 도시"}에 있고,
+기온은 약 ${weather.temp}도, 바람은 ${weather.wind} m/s,
+구름은 ${weather.clouds}%, 강수(1h)는 ${weather.precip}mm 정도인 날씨야.
+
+이 날씨에 어울리는 한국 대중음악 10곡을 JSON 형식으로 추천해줘.
+각 항목은 다음 필드를 가져야 해.
+
+[
+  {"title": "...", "artist": "...", "reason": "..."},
+  ...
+]
+
+설명 말고 JSON만 출력해.
+`.trim();
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-mini", // 계정에 맞게 모델명 바꿔도 됨
+      messages: [
+        {
+          role: "system",
+          content: "너는 사용자의 날씨와 분위기에 맞춰 노래를 추천해주는 음악 큐레이터야.",
+        },
+        { role: "user", content: prompt },
+      ],
+    });
+
+    const text = completion.choices[0]?.message?.content || "[]";
+
+    let songs = [];
+    try {
+      songs = JSON.parse(text);
+    } catch (e) {
+      console.error("JSON parse error:", e, text);
+      // 망했으면 그냥 빈 배열로
+      songs = [];
+    }
+
+    res.json({ songs });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "server_error" });
+  }
+});
 
 
 const PORT = process.env.PORT || 4000;

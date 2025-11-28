@@ -49,19 +49,27 @@ export default function Main() {
   }
 
   return (
-    <div style={{ maxWidth: 960, margin: '24px auto', padding: 16, display: 'grid', gap: 16 }}>
+    <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl flex-col gap-4 px-4 py-6">
+      
       {/* 상단: 날씨 카드 */}
-      <section style={{ border: '1px solid #eee', borderRadius: 12, padding: 16 }}>
-        <h2 style={{ marginTop: 0 }}>🌤️ 현재 날씨</h2>
-        {error && <div style={{ color: 'crimson' }}>{error}</div>}
-        <p style={{ margin: '4px 0' }}>
-          위치: <b>{city}</b>
-          {coords ? ` (${coords.lat.toFixed(3)}, ${coords.lng.toFixed(3)})` : ' - 위치 확인 중'}
+      <section className="rounded-2xl border border-neutral-800 bg-[#181818] px-5 py-4">
+        <h2 className="mb-3 text-lg font-semibold">🌤️ 현재 날씨</h2>
+        {error && <div className="mb-2 text-sm text-red-400">{error}</div>}
+        <p className="mb-2 text-sm text-gray-300">
+          위치: <b>{city}</b>{' '}
+          {coords ? `(${coords.lat.toFixed(3)}, ${coords.lng.toFixed(3)})` : ' - 위치 확인 중'}
         </p>
+
         {weather ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            {weather.icon && <img alt={weather.description ?? 'weather'} src={iconUrl(weather.icon)} />}
-            <ul style={{ display: 'flex', gap: 16, padding: 0, margin: 0, listStyle: 'none' }}>
+          <div className="flex items-center gap-4">
+            {weather.icon && (
+              <img
+                alt={weather.description ?? 'weather'}
+                src={iconUrl(weather.icon)}
+                className="h-12 w-12"
+              />
+            )}
+            <ul className="flex flex-wrap gap-4 text-sm text-gray-200">
               <li>기온: <b>{weather.temp}°C</b></li>
               <li>바람: <b>{weather.wind} m/s</b></li>
               <li>구름: <b>{weather.clouds}%</b></li>
@@ -69,9 +77,71 @@ export default function Main() {
             </ul>
           </div>
         ) : (
-          <p>날씨를 불러오는 중…</p>
+          <p className="text-sm text-gray-400">날씨를 불러오는 중…</p>
         )}
       </section>
+<<<<<<< Updated upstream
+=======
+
+      {/* 중앙: 좌(인기 차트) / 우(날씨 기반 추천곡) */}
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)]">
+        
+        {/* 왼쪽: 인기 차트 */}
+        <section className="rounded-2xl border border-neutral-800 bg-[#181818] px-5 py-4">
+          <h2 className="mb-3 text-lg font-semibold">📈 인기 차트</h2>
+          <p className="mb-4 text-xs text-gray-400">
+            인기차트
+          </p>
+
+          {/* 여기 안에 구현 */}
+        </section>
+
+        {/* 오른쪽: 오늘 날씨에 어울리는 노래 */}
+        <section className="rounded-2xl border border-neutral-800 bg-[#181818] px-5 py-4">
+          <h2 className="mb-3 text-lg font-semibold">🎵 오늘 날씨에 어울리는 노래</h2>
+
+          {songsLoading && <p>추천곡을 불러오는 중…</p>}
+          {songsError && <p style={{ color: 'crimson' }}>{songsError}</p>}
+
+          {!songsLoading && !songsError && songs.length === 0 && (
+            <p>추천곡이 아직 없습니다.</p>
+          )}
+          {songs.length > 0 && (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+              {songs.map((s, idx) => (
+                <li
+                  key={s.trackId ?? idx}
+                  style={{
+                    borderRadius: 10,
+                    border: '1px solid #f0f0f0',
+                    padding: 10,
+                    fontSize: 14,
+                  }}
+                >
+                  <div style={{ fontWeight: 600 }}>
+                    {idx + 1}. {s.title} - {s.artist}
+                  </div>
+                  <div style={{ color: '#555' }}>{s.reason}</div>
+
+                  {s.embed_url && (
+                    <div style={{ marginTop: 8 }}>
+                      <iframe
+                        src={s.embed_url}
+                        width="100%"
+                        height="80"
+                        style={{ borderRadius: 8, border: 'none' }}
+                        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                        loading="lazy"
+                      />
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+>>>>>>> Stashed changes
 
       {/* 오른쪽 하단 플로팅 액션들 */}
       {/* 공통 스타일: 툴팁 가능한 버튼 래퍼 */}
