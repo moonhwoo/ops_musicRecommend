@@ -58,7 +58,8 @@ app.get("/api/stats/popular", async (req, res) => {
   try {
     const lat = parseFloat(req.query.lat);
     const lng = parseFloat(req.query.lng);
-    const radiusKm = Math.min(parseFloat(req.query.radius_km) || 5, 50);
+    const rawRadius = parseFloat(req.query.radius_km) || 5;
+    const radiusKm = Math.min(Math.max(rawRadius, 0.01), 50);
     const windowD = Math.min(parseInt(req.query.window_d || "1", 10), 90); //최대 90일(3개월)
     const limit = Math.min(parseInt(req.query.limit || "10", 10), 50);
 
@@ -505,7 +506,8 @@ app.get("/api/now/nearby", async (req, res) => {
   try {
     const lat = parseFloat(req.query.lat);
     const lng = parseFloat(req.query.lng);
-    const radiusKm = Math.min(parseFloat(req.query.radius_km) || 2, 20);
+    const rawRadius = parseFloat(req.query.radius_km) || 2;
+    const radiusKm = Math.min(Math.max(rawRadius, 0.01), 20);
     const windowSec = Math.min(parseInt(req.query.window_s || "120", 10), 600);
     const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
 
