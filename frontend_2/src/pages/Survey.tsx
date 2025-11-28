@@ -27,7 +27,7 @@ export default function Survey() {
       setUserId(stored);
       return;
     }
-  
+
     // 2. 혹시 URL에 남아있는 경우가 있으면 한 번 더 보조용으로 읽기
     const params = new URLSearchParams(window.location.search);
     const uid = params.get("user_id");
@@ -59,16 +59,16 @@ export default function Survey() {
     console.log("📌 최종 제출 데이터:", answers);
 
     const res = await fetch("http://localhost:4000/api/survey", {
-   method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    user_id: userId,
-    novelty,
-    yearCategory,
-    genres,
-    favorite_artists: artists,
-  }),
-});
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        novelty,
+        yearCategory,
+        genres,
+        favorite_artists: artists,
+      }),
+    });
 
     const data = await res.json();
     if (data.ok) {
@@ -83,21 +83,21 @@ export default function Survey() {
       className="min-h-screen w-full flex justify-center py-16 px-5"
       style={{ backgroundColor: "#121212", color: "white" }}
     >
-      <div className="w-full">
-        <h1 className="text-4xl font-bold mb-14 text-center text-green-400">
-          음악 취향 설문조사
+      <div className="w-full max-w-4xl">
+        <h1 className="text-4xl font-bold mb-14 text-center text-white">
+          음악 취향 설정
         </h1>
 
         {/* Q1 */}
         <section
-          className="mb-12 p-8 rounded-xl"
+          className="mb-12 p-8 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.6)]"
           style={{ background: "#181818" }}
         >
           <h2 className="text-2xl font-semibold mb-4">
-            Q1. 새로운 음악을 얼마나 좋아하시나요?
+            Q1. 새로운 음악에 대한 선호도는 어느 정도인가요?
           </h2>
           <p className="text-sm text-gray-400 mb-4">
-            (0 = 싫어함 ~ 10 = 매우 좋아함)
+            (0은 새로운 음악을 피하는 편 ~ 10은 적극적으로 탐색하는 편)
           </p>
 
           <input
@@ -106,20 +106,22 @@ export default function Survey() {
             max={10}
             value={novelty}
             onChange={(e) => setNovelty(Number(e.target.value))}
-            className="w-full"
+            className="w-full accent-emerald-500"
+            // 일부 브라우저에서 확실히 초록색으로 보이게
+            style={{ accentColor: "#22c55e" }}
           />
-          <div className="text-right text-green-400 mt-2 text-lg">
+          <div className="text-right text-emerald-400 mt-2 text-lg">
             {novelty} / 10
           </div>
         </section>
 
         {/* Q2 */}
         <section
-          className="mb-12 p-8 rounded-xl"
+          className="mb-12 p-8 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.6)]"
           style={{ background: "#181818" }}
         >
           <h2 className="text-2xl font-semibold mb-6">
-            Q2. 주로 듣는 음악 시대는?
+            Q2. 주로 즐겨 듣는 시대의 음악은 무엇인가요?
           </h2>
 
           <div className="flex flex-wrap gap-6 text-lg">
@@ -133,6 +135,8 @@ export default function Survey() {
                   name="year"
                   checked={yearCategory === y}
                   onChange={() => setYearCategory(y)}
+                  className="accent-emerald-500"
+                  style={{ accentColor: "#22c55e" }}
                 />
                 <span>{y}</span>
               </label>
@@ -142,11 +146,11 @@ export default function Survey() {
 
         {/* Q3 */}
         <section
-          className="mb-12 p-8 rounded-xl"
+          className="mb-12 p-8 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.6)]"
           style={{ background: "#181818" }}
         >
           <h2 className="text-2xl font-semibold mb-6">
-            Q3. 좋아하는 음악 장르 (복수 선택)
+            Q3. 좋아하는 음악 장르는 무엇인가요? (복수 선택 가능)
           </h2>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-4 text-lg">
@@ -156,6 +160,8 @@ export default function Survey() {
                   type="checkbox"
                   checked={genres.includes(g)}
                   onChange={() => toggleGenre(g)}
+                  className="accent-emerald-500"
+                  style={{ accentColor: "#22c55e" }}
                 />
                 <span>{g}</span>
               </label>
@@ -165,21 +171,23 @@ export default function Survey() {
 
         {/* Q4 */}
         <section
-          className="mb-12 p-8 rounded-xl"
+          className="mb-12 p-8 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.6)]"
           style={{ background: "#181818" }}
         >
           <h2 className="text-2xl font-semibold mb-6">
-            Q4. 좋아하는 아티스트 1~3순위
+            Q4. 좋아하는 아티스트들을 적어주세요.
           </h2>
+          <p className="text-sm text-gray-400 mb-6">
+            자주 듣는 아티스트를 순위대로 적어주세요. (선택)
+          </p>
 
           {artists.map((a, idx) => (
             <div key={idx} className="mb-6">
               <label className="block mb-2 text-gray-300 text-lg">
-                {idx + 1}순위 아티스트
+                {idx + 1}순위
               </label>
               <input
-                className="w-full px-4 py-3 rounded-md text-lg"
-                style={{ background: "#2A2A2A", color: "white" }}
+                className="w-full px-4 py-3 rounded-md text-lg border border-[#333] focus:outline-none focus:border-emerald-500 bg-[#2A2A2A] text-white"
                 placeholder="아티스트 이름 입력"
                 value={a}
                 onChange={(e) => {
@@ -193,7 +201,7 @@ export default function Survey() {
         </section>
 
         <button
-          className="w-full py-4 text-xl rounded-lg font-semibold"
+          className="w-full py-4 text-xl rounded-lg font-semibold shadow-[0_10px_25px_rgba(0,0,0,0.7)] hover:brightness-110 transition"
           style={{
             backgroundColor: "#1DB954",
             color: "white",

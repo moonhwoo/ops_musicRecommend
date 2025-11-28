@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getWeatherByCoords, reverseGeocode, iconUrl, type WeatherNow } from '../services/weather'
+import {
+  getWeatherByCoords,
+  reverseGeocode,
+  iconUrl,
+  type WeatherNow,
+} from '../services/weather'
 
 type Song = {
   title: string
   artist: string
   reason: string
-  trackId?: string   
-  link?: string      
+  trackId?: string
+  link?: string
   preview_url?: string
   albumArt?: string
   embed_url?: string
 }
-
 
 export default function Main() {
   const nav = useNavigate()
@@ -21,250 +25,251 @@ export default function Main() {
   const [songsError, setSongsError] = useState<string | null>(null)
   const [songsLoading, setSongsLoading] = useState(false)
 
-  const [city, setCity] = useState('현재 위치')
   const [weather, setWeather] = useState<WeatherNow | null>(null)
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [city, setCity] = useState<string>('현재 위치')
+  const [weatherLoading, setWeatherLoading] = useState(false)
+  const [weatherErr, setWeatherErr] = useState<string | null>(null)
 
-  // 위치 권한 & OWM 호출
+  // 현재 위치 기반 날씨 + 추천 음악 가져오기
   useEffect(() => {
     if (!navigator.geolocation) {
-      setError('이 브라우저는 위치 기능을 지원하지 않습니다.')
+      setWeatherErr('이 브라우저는 위치 정보를 지원하지 않아요.')
       return
     }
+
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const lat = pos.coords.latitude
-        const lng = pos.coords.longitude
-        setCoords({ lat, lng })
+        const lon = pos.coords.longitude
         try {
-          const [cityName, w] = await Promise.all([
-            reverseGeocode(lat, lng),
-            getWeatherByCoords(lat, lng),
+          setWeatherLoading(true)
+          setWeatherErr(null)
+
+          const [w, cityName] = await Promise.all([
+            getWeatherByCoords(lat, lon),
+            reverseGeocode(lat, lon),
           ])
-          setCity(cityName)
+
           setWeather(w)
+          setCity(cityName)
 
-          // 날씨 기반 노래 추천 API 호출
-          try {
-            setSongsLoading(true)
-            setSongsError(null)
-
-            const resp = await fetch('http://localhost:4000/api/weather-recommend', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                city: cityName,
-                weather: w, // { temp, wind, clouds, precip ... }
-              }),
-            })
-
-            if (!resp.ok) {
-              throw new Error(`weather-recommend error: ${resp.status}`)
-            }
-
-            const data = await resp.json()
-            setSongs(data.songs ?? [])
-          } catch (e) {
-            console.error(e)
-            setSongsError('추천곡을 불러오지 못했습니다.')
-          } finally {
-            setSongsLoading(false)
-          }
-
-        } catch (e) {
+          await fetchSongs(cityName, w)
+        } catch (e: unknown) {
           console.error(e)
-          setError('날씨 정보를 불러오지 못했습니다.')
+          const msg =
+            e instanceof Error
+              ? e.message
+              : '날씨 정보를 가져오지 못했습니다.'
+          setWeatherErr(msg)
+        } finally {
+          setWeatherLoading(false)
         }
       },
       (err) => {
         console.error(err)
-        setError('위치 권한이 필요합니다.')
+        setWeatherErr('위치 권한이 필요합니다.')
       },
-      { enableHighAccuracy: false, maximumAge: 60_000 }
+      { enableHighAccuracy: false, maximumAge: 60_000 },
     )
   }, [])
 
+  async function fetchSongs(cityName: string, w: WeatherNow) {
+    try {
+      setSongsLoading(true)
+      setSongsError(null)
+
+      const resp = await fetch(
+        'http://localhost:4000/api/weather-recommend',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            city: cityName,
+            weather: w,
+          }),
+        },
+      )
+
+      if (!resp.ok) {
+        throw new Error(`weather-recommend error: ${resp.status}`)
+      }
+
+      const data = await resp.json()
+      setSongs(data.songs ?? [])
+    } catch (e: unknown) {
+      console.error(e)
+      const msg =
+        e instanceof Error
+          ? e.message
+          : '추천 음악을 가져오지 못했습니다.'
+      setSongsError(msg)
+    } finally {
+      setSongsLoading(false)
+    }
+  }
 
   function goTextChat() {
     nav('/chat')
   }
+
   function goNearby() {
     nav('/nearby')
   }
 
   return (
-    <div style={{ maxWidth: 960, margin: '24px auto', padding: 16, display: 'grid', gap: 16 }}>
-      {/* 상단: 날씨 카드 */}
-      <section style={{ border: '1px solid #eee', borderRadius: 12, padding: 16 }}>
-        <h2 style={{ marginTop: 0 }}>🌤️ 현재 날씨</h2>
-        {error && <div style={{ color: 'crimson' }}>{error}</div>}
-        <p style={{ margin: '4px 0' }}>
-          위치: <b>{city}</b>
-          {coords ? ` (${coords.lat.toFixed(3)}, ${coords.lng.toFixed(3)})` : ' - 위치 확인 중'}
-        </p>
-        {weather ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            {weather.icon && <img alt={weather.description ?? 'weather'} src={iconUrl(weather.icon)} />}
-            <ul style={{ display: 'flex', gap: 16, padding: 0, margin: 0, listStyle: 'none' }}>
-              <li>기온: <b>{weather.temp}°C</b></li>
-              <li>바람: <b>{weather.wind} m/s</b></li>
-              <li>구름: <b>{weather.clouds}%</b></li>
-              <li>강수(1h): <b>{weather.precip} mm</b></li>
-            </ul>
-          </div>
-        ) : (
-          <p>날씨를 불러오는 중…</p>
-        )}
-      </section>
-      
-      <section style={{ border: '1px solid #eee', borderRadius: 12, padding: 16 }}>
-        <h2 style={{ marginTop: 0 }}>🎵 오늘 날씨에 어울리는 노래</h2>
+    <div className="min-h-screen w-full bg-[#121212] text-white">
+      <div className="mx-auto max-w-5xl px-4 pb-24 pt-6">
+        {/* 🌤️ 상단: 현재 날씨 카드 */}
+        <section className="rounded-2xl border border-neutral-800 bg-[#181818] px-5 py-4 text-center shadow-[0_16px_40px_rgba(0,0,0,0.65)]">
+          <h2 className="mb-3 text-lg font-semibold text-emerald-200">
+            🌤️ 현재 날씨
+          </h2>
 
-        {songsLoading && <p>추천곡을 불러오는 중…</p>}
-        {songsError && <p style={{ color: 'crimson' }}>{songsError}</p>}
+          {weatherErr && (
+            <p className="mb-2 text-sm text-red-400">{weatherErr}</p>
+          )}
 
-        {!songsLoading && !songsError && songs.length === 0 && (
-          <p>추천곡이 아직 없습니다.</p>
-        )}
-        {songs.length > 0 && (
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
-            {songs.map((s, idx) => (
-              <li
-                key={s.trackId ?? idx}
-                style={{
-                  borderRadius: 10,
-                  border: '1px solid #f0f0f0',
-                  padding: 10,
-                  fontSize: 14,
-                }}
-              >
-                <div style={{ fontWeight: 600 }}>
-                  {idx + 1}. {s.title} - {s.artist}
+          <p className="mb-2 text-sm text-gray-300">
+            위치: <b>{city}</b>
+          </p>
+
+          {weatherLoading && !weather && (
+            <p className="text-sm text-gray-400 text-center">날씨를 불러오는 중…</p>
+          )}
+
+          {weather && (
+            <div className="mt-3 flex flex-col items-center justify-center gap-4 md:flex-row md:gap-6">
+              {weather.icon && (
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#1f1f1f] shadow-lg">
+                  <img
+                    src={iconUrl(weather.icon)}
+                    alt={weather.description ?? 'weather'}
+                    className="h-14 w-14"
+                  />
                 </div>
-                <div style={{ color: '#555' }}>{s.reason}</div>
+              )}
+              <ul className="flex flex-wrap justify-center gap-4 text-sm text-gray-200">
+                <li>
+                  기온: <b>{weather.temp.toFixed(1)}°C</b>
+                </li>
+                <li>
+                  바람: <b>{weather.wind.toFixed(1)} m/s</b>
+                </li>
+                <li>
+                  구름: <b>{weather.clouds}%</b>
+                </li>
+                <li>
+                  강수(1h): <b>{weather.precip} mm</b>
+                </li>
+              </ul>
+            </div>
+          )}
+        </section>
 
-                {s.embed_url && (
-                  <div style={{ marginTop: 8 }}>
-                    <iframe
-                      src={s.embed_url}
-                      width="100%"
-                      height="80"
-                      style={{ borderRadius: 8, border: 'none' }}
-                      allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                      loading="lazy"
-                    />
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        {/* 중앙: 좌(날씨 기반 추천) / 우(챗봇 & 위치 추천) */}
+        <div className="mt-8 grid gap-6 md:grid-cols-2">
+          {/* 왼쪽: 날씨 기반 추천 리스트 */}
+          <section className="rounded-2xl bg-[#181818] p-5 text-center shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
+            <h2 className="mb-3 text-center text-lg font-semibold text-emerald-200">
+              🎵 현재 날씨에 어울리는 노래
+            </h2>
 
+            {songsLoading && (
+              <p className="text-sm text-gray-400">추천곡을 불러오는 중…</p>
+            )}
+            {songsError && (
+              <p className="text-sm text-red-400">{songsError}</p>
+            )}
 
-      {/* 오른쪽 하단 플로팅 액션들 */}
-      {/* 공통 스타일: 툴팁 가능한 버튼 래퍼 */}
-      <div
-        style={{
-          position: 'fixed',
-          right: 24,
-          bottom: 24,
-          display: 'grid',
-          gap: 12,
-          zIndex: 1000,
-        }}
-      >
-        {/* 💬 챗봇 버튼 (위쪽) */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={goTextChat}
-            title="챗봇"
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 999,
-              border: '1px solid #2c68ff',
-              background: '#2f6bff',
-              color: '#fff',
-              fontSize: 24,
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
-            }}
-            aria-label="챗봇"
-          >
-            💬
-          </button>
-          <span
-            style={{
-              position: 'absolute',
-              right: 72,
-              bottom: 12,
-              background: 'rgba(0,0,0,0.8)',
-              color: '#fff',
-              padding: '6px 10px',
-              borderRadius: 8,
-              fontSize: 12,
-              opacity: 0,
-              pointerEvents: 'none',
-              transition: 'opacity .2s',
-            }}
-            className="chat-tooltip"
-          >
-            챗봇
-          </span>
+            {!songsLoading && !songsError && songs.length === 0 && (
+              <p className="text-sm text-gray-400">추천곡이 아직 없습니다.</p>
+            )}
+
+            {songs.length > 0 && (
+              <ul className="mt-4 grid gap-3 text-sm">
+                {songs.map((s, idx) => (
+                  <li
+                    key={s.trackId ?? idx}
+                    className="rounded-xl border border-[#27272f] bg-[#111827] p-3 text-left"
+                  >
+                    <div className="font-semibold">
+                      {idx + 1}. {s.title} - {s.artist}
+                    </div>
+                    <div className="mt-1 text-xs text-gray-400">{s.reason}</div>
+
+                    {s.embed_url && (
+                      <div className="mt-2 overflow-hidden rounded-lg border border-[#27272f]">
+                        <iframe
+                          src={s.embed_url}
+                          width="100%"
+                          height="80"
+                          style={{ border: 'none' }}
+                          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* 오른쪽: 기능 카드들 */}
+          <section className="flex flex-col gap-4">
+            {/* 텍스트 챗봇 카드 */}
+            <div className="flex flex-1 flex-col justify-between rounded-2xl bg-[#181818] p-5 text-center shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
+              <div>
+                <h2 className="mb-2 text-center text-lg font-semibold text-emerald-200">
+                  텍스트로 추천 받기
+                </h2>
+                <p className="text-sm text-gray-300">
+                  지금 기분이나 상황을 한 줄로 적어보세요.
+                  <br />
+                  그 느낌에 어울리는 노래를 골라서 알려줄게요.
+                </p>
+              </div>
+              <button
+                onClick={goTextChat}
+                className="mt-4 w-full rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-emerald-50 hover:bg-emerald-500"
+              >
+                💬 챗봇과 대화 시작하기
+              </button>
+            </div>
+
+            {/* 위치 기반 카드 */}
+            <div className="flex flex-1 flex-col justify-between rounded-2xl bg-[#181818] p-5 text-center shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
+              <div>
+                <h2 className="mb-2 text-center text-lg font-semibold text-emerald-200">
+                  내 주변에서 인기 있는 노래
+                </h2>
+                <p className="text-sm text-gray-300">
+                  내 위치 근처에서 사람들이 실제로 많이 듣는 노래를
+                  보여줘요.
+                  <br />
+                  지도에서 어디서 어떤 곡이 재생 중인지 함께 볼 수 있어요.
+                </p>
+              </div>
+              <button
+                onClick={goNearby}
+                className="mt-4 w-full rounded-lg border border-emerald-600 py-2 text-sm font-semibold text-emerald-200 hover:bg-[#052e16]"
+              >
+                📍 노래 탐색하러 가기
+              </button>
+            </div>
+          </section>
         </div>
-        
-        {/* 📍 위치 기반 음악 추천 버튼 (아래쪽) */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={goNearby}
-            title="위치 기반 음악 추천"
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 999,
-              border: '1px solid #18a058',
-              background: '#1baa6a',
-              color: '#fff',
-              fontSize: 24,
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
-            }}
-            aria-label="위치 기반 음악 추천"
-          >
-            📍
-          </button>
-          {/* 간단 툴팁 */}
-          <span
-            style={{
-              position: 'absolute',
-              right: 72,
-              bottom: 12,
-              background: 'rgba(0,0,0,0.8)',
-              color: '#fff',
-              padding: '6px 10px',
-              borderRadius: 8,
-              fontSize: 12,
-              opacity: 0,
-              pointerEvents: 'none',
-              transition: 'opacity .2s',
-            }}
-            className="nearby-tooltip"
-          >
-            위치 기반 추천
-          </span>
-        </div>
 
+        {/* 하단: 인기 차트 영역 */}
+        <section className="mt-8 rounded-2xl bg-[#181818] p-5 text-center shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
+          <h2 className="mb-2 text-center text-lg font-semibold text-emerald-200">
+            📈 인기 차트
+          </h2>
+          <p className="text-center text-sm text-gray-400">
+            구현 예정
+          </p>
+        </section>
       </div>
-
-      {/* 툴팁 표시를 위한 인라인 스타일 */}
-      <style>{`
-        div[style] > div:hover > .chat-tooltip,
-        div[style] > div:hover > .nearby-tooltip {
-          opacity: 1;
-        }
-      `}</style>
     </div>
   )
 }
