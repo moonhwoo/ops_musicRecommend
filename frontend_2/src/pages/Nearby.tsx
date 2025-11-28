@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import MapView from './MapView'
+import { useNavigate } from "react-router-dom";
+
 
 type Item = {
   trackId: string
@@ -24,6 +26,8 @@ type NowItem = {
 const GREEN = '#15803d'
 
 export default function Nearby() {
+  const nav = useNavigate();
+
   // Spotify 콜백 파라미터 처리 (혹시 App에서 못 받았을 때 대비)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -209,6 +213,21 @@ export default function Nearby() {
   const [tab, setTab] = useState<'popular' | 'live'>('popular')
 
   return (
+    <div className="min-h-screen bg-[#121212] text-white">
+
+      {/* 메인으로 돌아가기 + 제목 */}
+      <div className="flex items-center gap-3 border-b border-[#1f2937] px-4 py-3 bg-[#0b0f13]">
+        <button
+          onClick={() => nav('/main')}
+          className="rounded-md border border-emerald-600 px-3 py-1 text-sm text-emerald-300 hover:bg-[#052e16] transition"
+        >
+          ← 메인으로
+        </button>
+        <h2 className="text-base font-semibold text-emerald-200">
+          내 주변 인기 음악
+        </h2>
+      </div>
+
     <div
       style={{
         maxWidth: 720,
@@ -249,7 +268,15 @@ export default function Nearby() {
           step={0.01}
           value={radiusKm}
           onChange={(e) => setRadiusKm(parseFloat(e.target.value))}
-          style={{ width: '100%', marginTop: 8 }}
+          style={{
+            width: '100%',
+            marginTop: 8,
+            accentColor: '#22c55e',
+            height: 6,
+            borderRadius: 999,
+            background:
+              'linear-gradient(90deg, #064e3b 0%, #16a34a 50%, #4ade80 100%)',
+            }}
         />
       </div>
 
@@ -300,6 +327,7 @@ export default function Nearby() {
           실시간
         </button>
       </div>
+    </div>
 
       {tab === 'popular' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

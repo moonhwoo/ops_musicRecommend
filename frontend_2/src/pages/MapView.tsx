@@ -56,7 +56,7 @@ function AutoZoom({
   return null
 }
 
-/** 📍 "내 위치로 이동" 버튼 */
+/** "내 위치로 이동" 버튼 */
 function MyLocationControl({
   center,
   radiusKm,
@@ -106,7 +106,7 @@ function MyLocationControl({
             gap: 4,
           }}
         >
-          📍 내 위치
+          내 위치
         </button>
       </div>
     </div>

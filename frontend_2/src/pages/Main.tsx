@@ -18,19 +18,17 @@ type Song = {
   embed_url?: string
 }
 
-const GREEN = '#15803d'
-
 export default function Main() {
   const nav = useNavigate()
+
+  const [songs, setSongs] = useState<Song[]>([])
+  const [songsError, setSongsError] = useState<string | null>(null)
+  const [songsLoading, setSongsLoading] = useState(false)
 
   const [weather, setWeather] = useState<WeatherNow | null>(null)
   const [city, setCity] = useState<string>('현재 위치')
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [weatherErr, setWeatherErr] = useState<string | null>(null)
-
-  const [songs, setSongs] = useState<Song[]>([])
-  const [songsLoading, setSongsLoading] = useState(false)
-  const [songsErr, setSongsErr] = useState<string | null>(null)
 
   // 현재 위치 기반 날씨 + 추천 음악 가져오기
   useEffect(() => {
@@ -56,9 +54,13 @@ export default function Main() {
           setCity(cityName)
 
           await fetchSongs(cityName, w)
-        } catch (e: any) {
+        } catch (e: unknown) {
           console.error(e)
-          setWeatherErr(e?.message ?? '날씨 정보를 가져오지 못했습니다.')
+          const msg =
+            e instanceof Error
+              ? e.message
+              : '날씨 정보를 가져오지 못했습니다.'
+          setWeatherErr(msg)
         } finally {
           setWeatherLoading(false)
         }
@@ -74,7 +76,7 @@ export default function Main() {
   async function fetchSongs(cityName: string, w: WeatherNow) {
     try {
       setSongsLoading(true)
-      setSongsErr(null)
+      setSongsError(null)
 
       const resp = await fetch(
         'http://localhost:4000/api/weather-recommend',
@@ -94,9 +96,13 @@ export default function Main() {
 
       const data = await resp.json()
       setSongs(data.songs ?? [])
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e)
-      setSongsErr(e?.message ?? '추천 음악을 가져오지 못했습니다.')
+      const msg =
+        e instanceof Error
+          ? e.message
+          : '추천 음악을 가져오지 못했습니다.'
+      setSongsError(msg)
     } finally {
       setSongsLoading(false)
     }
@@ -113,157 +119,156 @@ export default function Main() {
   return (
     <div className="min-h-screen w-full bg-[#121212] text-white">
       <div className="mx-auto max-w-5xl px-4 pb-24 pt-6">
-        {/* 날씨 카드 */}
-        <section className="flex flex-col gap-4 rounded-2xl bg-[#181818] p-6 shadow-[0_16px_40px_rgba(0,0,0,0.65)] md:flex-row md:items-center">
-          <div className="flex flex-1 items-center gap-4">
-            {weather?.icon && (
-              <img
-                src={iconUrl(weather.icon)}
-                alt={weather.description ?? 'weather'}
-                className="h-16 w-16"
-              />
-            )}
-            <div>
-              <div className="text-sm text-gray-400">지금 위치</div>
-              <div className="text-xl font-semibold">{city}</div>
-              {weather && (
-                <div className="mt-1 text-sm text-gray-300">
-                  {weather.description} · {weather.temp.toFixed(1)}°C · 바람{' '}
-                  {weather.wind.toFixed(1)} m/s
+        {/* 🌤️ 상단: 현재 날씨 카드 */}
+        <section className="rounded-2xl border border-neutral-800 bg-[#181818] px-5 py-4 text-center shadow-[0_16px_40px_rgba(0,0,0,0.65)]">
+          <h2 className="mb-3 text-lg font-semibold text-emerald-200">
+            🌤️ 현재 날씨
+          </h2>
+
+          {weatherErr && (
+            <p className="mb-2 text-sm text-red-400">{weatherErr}</p>
+          )}
+
+          <p className="mb-2 text-sm text-gray-300">
+            위치: <b>{city}</b>
+          </p>
+
+          {weatherLoading && !weather && (
+            <p className="text-sm text-gray-400 text-center">날씨를 불러오는 중…</p>
+          )}
+
+          {weather && (
+            <div className="mt-3 flex flex-col items-center justify-center gap-4 md:flex-row md:gap-6">
+              {weather.icon && (
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#1f1f1f] shadow-lg">
+                  <img
+                    src={iconUrl(weather.icon)}
+                    alt={weather.description ?? 'weather'}
+                    className="h-14 w-14"
+                  />
                 </div>
               )}
+              <ul className="flex flex-wrap justify-center gap-4 text-sm text-gray-200">
+                <li>
+                  기온: <b>{weather.temp.toFixed(1)}°C</b>
+                </li>
+                <li>
+                  바람: <b>{weather.wind.toFixed(1)} m/s</b>
+                </li>
+                <li>
+                  구름: <b>{weather.clouds}%</b>
+                </li>
+                <li>
+                  강수(1h): <b>{weather.precip} mm</b>
+                </li>
+              </ul>
             </div>
-          </div>
-          <div className="mt-3 flex-1 text-sm text-gray-300 md:mt-0 md:text-right">
-            <div className="font-semibold text-emerald-300">
-              오늘 날씨에 어울리는 음악을 골라봤어요 🎧
-            </div>
-            <div className="mt-1">
-              <span className="text-xs text-gray-400">
-                설문 + 현재 날씨를 함께 반영해 추천해요.
-              </span>
-            </div>
-          </div>
+          )}
         </section>
 
-        {/* 메인 그리드 */}
+        {/* 중앙: 좌(날씨 기반 추천) / 우(챗봇 & 위치 추천) */}
         <div className="mt-8 grid gap-6 md:grid-cols-2">
           {/* 왼쪽: 날씨 기반 추천 리스트 */}
-          <section className="rounded-2xl bg-[#181818] p-5 shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
-            <h2 className="mb-3 text-lg font-semibold text-emerald-200">
-              오늘의 날씨 기반 추천
+          <section className="rounded-2xl bg-[#181818] p-5 text-center shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
+            <h2 className="mb-3 text-center text-lg font-semibold text-emerald-200">
+              🎵 현재 날씨에 어울리는 노래
             </h2>
 
-            {weatherLoading && (
-              <p className="text-sm text-gray-400">날씨를 불러오는 중...</p>
-            )}
-            {weatherErr && (
-              <p className="text-sm text-red-400">{weatherErr}</p>
-            )}
-
             {songsLoading && (
-              <p className="mt-3 text-sm text-gray-400">
-                추천 곡을 불러오는 중입니다...
-              </p>
+              <p className="text-sm text-gray-400">추천곡을 불러오는 중…</p>
             )}
-            {songsErr && (
-              <p className="mt-3 text-sm text-red-400">{songsErr}</p>
+            {songsError && (
+              <p className="text-sm text-red-400">{songsError}</p>
             )}
 
-            {!songsLoading && !songsErr && songs.length === 0 && (
-              <p className="mt-3 text-sm text-gray-400">
-                아직 추천 곡이 없습니다. 잠시 후 다시 시도해주세요.
-              </p>
+            {!songsLoading && !songsError && songs.length === 0 && (
+              <p className="text-sm text-gray-400">추천곡이 아직 없습니다.</p>
             )}
 
-            <ol className="mt-3 space-y-2 text-sm">
-              {songs.map((s, idx) => (
-                <li
-                  key={s.trackId ?? `${s.title}-${idx}`}
-                  className="flex items-center gap-3 rounded-xl border border-[#27272f] bg-[#111827] p-3"
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#052e16] text-xs font-bold text-emerald-300">
-                    {idx + 1}
-                  </div>
-                  <div className="flex-1">
+            {songs.length > 0 && (
+              <ul className="mt-4 grid gap-3 text-sm">
+                {songs.map((s, idx) => (
+                  <li
+                    key={s.trackId ?? idx}
+                    className="rounded-xl border border-[#27272f] bg-[#111827] p-3 text-left"
+                  >
                     <div className="font-semibold">
-                      {s.title}{' '}
-                      <span className="text-xs text-gray-400">
-                        - {s.artist}
-                      </span>
+                      {idx + 1}. {s.title} - {s.artist}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-400">
-                      {s.reason}
-                    </div>
-                  </div>
-                  {s.link && (
-                    <a
-                      href={s.link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs font-semibold text-emerald-300 underline"
-                    >
-                      열기
-                    </a>
-                  )}
-                </li>
-              ))}
-            </ol>
+                    <div className="mt-1 text-xs text-gray-400">{s.reason}</div>
+
+                    {s.embed_url && (
+                      <div className="mt-2 overflow-hidden rounded-lg border border-[#27272f]">
+                        <iframe
+                          src={s.embed_url}
+                          width="100%"
+                          height="80"
+                          style={{ border: 'none' }}
+                          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           {/* 오른쪽: 기능 카드들 */}
           <section className="flex flex-col gap-4">
             {/* 텍스트 챗봇 카드 */}
-            <div className="flex flex-1 flex-col justify-between rounded-2xl bg-[#181818] p-5 shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
+            <div className="flex flex-1 flex-col justify-between rounded-2xl bg-[#181818] p-5 text-center shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
               <div>
-                <h2 className="mb-2 text-lg font-semibold text-emerald-200">
-                  텍스트 챗봇 추천
+                <h2 className="mb-2 text-center text-lg font-semibold text-emerald-200">
+                  텍스트로 추천 받기
                 </h2>
                 <p className="text-sm text-gray-300">
-                  지금 기분이나 상황을 자유롭게 적으면,
+                  지금 기분이나 상황을 한 줄로 적어보세요.
                   <br />
-                  LLM이 감정 분석 + 플레이리스트를 함께 추천해줘요.
+                  그 느낌에 어울리는 노래를 골라서 알려줄게요.
                 </p>
               </div>
               <button
                 onClick={goTextChat}
                 className="mt-4 w-full rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-emerald-50 hover:bg-emerald-500"
               >
-                💬 텍스트로 추천 받기
+                💬 챗봇과 대화 시작하기
               </button>
             </div>
 
             {/* 위치 기반 카드 */}
-            <div className="flex flex-1 flex-col justify-between rounded-2xl bg-[#181818] p-5 shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
+            <div className="flex flex-1 flex-col justify-between rounded-2xl bg-[#181818] p-5 text-center shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
               <div>
-                <h2 className="mb-2 text-lg font-semibold text-emerald-200">
-                  위치 기반 추천
+                <h2 className="mb-2 text-center text-lg font-semibold text-emerald-200">
+                  내 주변에서 인기 있는 노래
                 </h2>
                 <p className="text-sm text-gray-300">
-                  현재 내 위치 기준으로,
+                  내 위치 근처에서 사람들이 실제로 많이 듣는 노래를
+                  보여줘요.
                   <br />
-                  주변 사람들이 실제로 듣고 있는 곡과 인기곡을 보여줘요.
+                  지도에서 어디서 어떤 곡이 재생 중인지 함께 볼 수 있어요.
                 </p>
               </div>
               <button
                 onClick={goNearby}
                 className="mt-4 w-full rounded-lg border border-emerald-600 py-2 text-sm font-semibold text-emerald-200 hover:bg-[#052e16]"
               >
-                📍 내 주변 사람들 음악 보기
+                📍 노래 탐색하러 가기
               </button>
             </div>
           </section>
         </div>
 
-        {/* 플로팅 버튼: 바로 챗봇으로 */}
-        <button
-          onClick={goTextChat}
-          className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-2xl shadow-[0_12px_30px_rgba(0,0,0,0.8)] hover:bg-emerald-500"
-          title="텍스트 챗봇으로"
-          style={{ zIndex: 50 }}
-        >
-          💬
-        </button>
+        {/* 하단: 인기 차트 영역 */}
+        <section className="mt-8 rounded-2xl bg-[#181818] p-5 text-center shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
+          <h2 className="mb-2 text-center text-lg font-semibold text-emerald-200">
+            📈 인기 차트
+          </h2>
+          <p className="text-center text-sm text-gray-400">
+            구현 예정
+          </p>
+        </section>
       </div>
     </div>
   )

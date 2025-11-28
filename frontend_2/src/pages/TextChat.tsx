@@ -111,8 +111,8 @@ export default function TextChat() {
       >
         <button
           onClick={goHome}
-          aria-label="메인으로"
-          title="메인으로"
+          aria-label="홈으로"
+          title="홈으로"
           style={{
             padding: '6px 10px',
             borderRadius: 8,
@@ -122,11 +122,11 @@ export default function TextChat() {
             cursor: 'pointer',
           }}
         >
-          ← 메인으로
+          ← 홈으로
         </button>
         <b>텍스트 챗봇</b>
         <span style={{ color: '#9ca3af', marginLeft: 8, fontSize: 12 }}>
-          / 대화는 현재 세션에만 저장됩니다
+          대화는 기록에 남지 않아요
         </span>
       </header>
 
@@ -165,7 +165,7 @@ export default function TextChat() {
               <div style={{ color: '#9ca3af', marginTop: 8, fontSize: 14 }}>
                 지금 기분이나 상황을 편하게 적어보면,
                 <br />
-                감정 분석 + 노래 추천을 함께 해줄게요.
+                감정 분석과 함께 노래 추천을 해줄게요.
               </div>
             ) : (
               <div
