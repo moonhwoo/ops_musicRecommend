@@ -36,6 +36,7 @@ class AnalyzeResponse(BaseModel):
 
 class RecommendRequest(BaseModel):
     analysis_json: str
+    user_id: Optional[str] = None
 
 
 class Song(BaseModel):
@@ -113,8 +114,12 @@ def analyze_endpoint(req: AnalyzeRequest) -> AnalyzeResponse:
 
 @app.post("/recommend", response_model=RecommendResponse)
 def recommend_endpoint(req: RecommendRequest) -> RecommendResponse:
-    songs = recommend_songs_via_openai_logic(req.analysis_json)
-    songs_with_links = attach_spotify_links_logic(songs, min_valid=4)
+    user_profile = None
+    if req.user_id:
+        user_profile = load_user_profile(req.user_id)
+    
+    songs = recommend_songs_via_openai_logic(req.analysis_json, user_profile=user_profile)
+    songs_with_links = attach_spotify_links_logic(songs, min_valid=8)
     return RecommendResponse(
         songs=[
             Song(
