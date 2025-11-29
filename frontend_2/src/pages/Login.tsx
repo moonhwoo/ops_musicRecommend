@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { login, saveSession } from '../services/auth'
@@ -6,30 +6,67 @@ import { login, saveSession } from '../services/auth'
 type NavState = { from?: string } | null
 
 export default function Login() {
+  /** -----------------------------
+   *  1) 기존 앱 로그인 상태
+   * ----------------------------- */
   const [id, setId] = useState('')
   const [pw, setPw] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  /** -----------------------------
+   *  2) Spotify OAuth 상태 표시용
+   * ----------------------------- */
+  const [spotifyName, setSpotifyName] = useState<string | null>(null)
+
   const nav = useNavigate()
   const loc = useLocation()
-  const surveyDone = localStorage.getItem('survey_done') === '1'
-  const defaultTarget = surveyDone ? '/main' : '/survey'
-  const from = (loc.state as NavState)?.from ?? defaultTarget
+  const navState = loc.state as NavState
 
+  const from = navState?.from || '/survey'
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+  /* -----------------------------
+   *  OAuth 콜백 후 쿼리스트링에서
+   *  user_id / display_name 꺼내서
+   *  localStorage에 저장 + 화면 표시
+   * ----------------------------- */
+  useEffect(() => {
+    const params = new URLSearchParams(loc.search)
+
+    const displayName = params.get('display_name')
+    const spotifyUserId = params.get('user_id')
+
+    // 1) URL에 display_name 이 있으면 → 그걸 사용
+    if (displayName) {
+      localStorage.setItem('spotify_display_name', displayName)
+      setSpotifyName(displayName)
+    } else {
+      // 2) 없으면 → 기존 localStorage 값으로 복구
+      const storedName = localStorage.getItem('spotify_display_name')
+      if (storedName) setSpotifyName(storedName)
+    }
+
+    // 3) spotify_user_id가 있으면 → localStorage에 저장
+    if (spotifyUserId) {
+      localStorage.setItem('spotify_user_id', spotifyUserId)
+    }
+  }, [loc.search])
+
+  /**  (A) 기존 앱 로그인 처리   */
+  async function onSubmitApp(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setErr(null)
+
     if (!id || !pw) {
       setErr('아이디와 비밀번호를 입력하세요.')
       return
     }
+
     try {
       setLoading(true)
-      const r = await login(id, pw)
-      saveSession(r)
-      // 로그인 성공 → 설문 안 했으면 /survey, 했으면 /main
+      const result = await login(id, pw)
+      saveSession(result)
+
       nav(from, { replace: true })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '로그인 실패'
@@ -39,24 +76,95 @@ export default function Login() {
     }
   }
 
+  // Spotify OAuth 시작
+  const handleSpotifyLogin = () => {
+    window.location.href = 'http://127.0.0.1:4000/login'
+  }
+
   return (
-    <div style={{ maxWidth: 360, margin: '60px auto' }}>
-      <h1>로그인</h1>
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: 8 }}>
-        <label>
-          아이디
-          <input value={id} onChange={(e) => setId(e.target.value)} placeholder="demo" autoComplete="username" />
-        </label>
-        <label>
-          비밀번호
-          <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="pass1234" autoComplete="current-password" />
-        </label>
-        {err && <div style={{ color: 'crimson' }}>{err}</div>}
-        <button disabled={loading} type="submit">{loading ? '확인 중…' : '로그인'}</button>
-      </form>
-      <p style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
-        데모: <b>demo / pass1234</b>
-      </p>
+    <div style={{ maxWidth: 420, margin: '60px auto', display: 'grid', gap: 24 }}>
+      {/* 1) 기존 앱 로그인          */}
+      <section>
+        <h1>앱 로그인</h1>
+
+        <form onSubmit={onSubmitApp} style={{ display: 'grid', gap: 8 }}>
+          <label>
+            아이디
+            <input
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              placeholder="demo"
+              autoComplete="username"
+            />
+          </label>
+
+          <label>
+            비밀번호
+            <input
+              type="password"
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              placeholder="pass1234"
+              autoComplete="current-password"
+            />
+          </label>
+
+          {err && <div style={{ color: 'crimson' }}>{err}</div>}
+
+          <button disabled={loading} type="submit">
+            {loading ? '확인 중…' : '로그인'}
+          </button>
+        </form>
+
+        <p style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
+          데모 계정: <b>demo / pass1234</b>
+        </p>
+      </section>
+
+      {/* 2) Spotify OAuth 로그인   */}
+      <section
+        style={{
+          padding: 16,
+          borderRadius: 12,
+          border: '1px solid #eee',
+          background: '#121212',
+          color: '#fff',
+        }}
+      >
+        <h2 style={{ marginTop: 0 }}>🎧 Spotify 연동</h2>
+
+        {spotifyName ? (
+          <p style={{ fontSize: 13, color: '#bbb' }}>
+            현재 연결된 계정: <b>{spotifyName}</b>
+          </p>
+        ) : (
+          <p style={{ fontSize: 13, color: '#bbb' }}>
+            아직 Spotify 계정이 연결되지 않았습니다.
+          </p>
+        )}
+
+        <button
+          onClick={handleSpotifyLogin}
+          style={{
+            marginTop: 8,
+            background: '#1DB954',
+            color: '#fff',
+            padding: '12px 24px',
+            fontSize: 16,
+            borderRadius: 999,
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          Spotify로 로그인
+        </button>
+
+        <p style={{ marginTop: 8, fontSize: 11, color: '#aaa' }}>
+          * 실제 Spotify 공식 로그인은 아이디/비밀번호를 받지 않고,
+          <br />
+          * Spotify 로그인 페이지로 이동했다가, 토큰만 받아오는 OAuth 방식입니다.
+        </p>
+      </section>
     </div>
   )
 }

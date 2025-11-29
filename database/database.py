@@ -1,49 +1,35 @@
-# database/database.py
-
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+from pymongo import MongoClient
+from pathlib import Path
 import os
 
-# .env 파일 읽기
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parents[1]  # .../ops_musicRecommend
+ENV_PATH = BASE_DIR / ".env"
 
-DB_URL = os.getenv("DB_URL")
+load_dotenv(dotenv_path=ENV_PATH)
 
-if not DB_URL:
-    raise ValueError("❌ DB_URL이 설정 안 됐어요. .env 파일을 확인하세요.")
+# MONGO_URI 우선, 없으면 DB_URL 사용
+MONGO_URI = os.getenv("DB_URL")
+if not MONGO_URI:
+    raise ValueError("❌ MONGO_URI(DB_URL)가 설정 안 됐어요!")  
 
-# SQLAlchemy 엔진 & 세션팩토리 생성
-engine = create_engine(DB_URL, echo=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+client = MongoClient(MONGO_URI)
+db = client.get_default_database()
+if db is None:
+    db = client["ops_music"] 
 
-# 나중에 FastAPI 같은 데서 쓸 함수 (지금은 그냥 준비만)
 def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    """다른 모듈에서 Mongo DB 객체를 가져올 때 사용하는 헬퍼."""
+    return db
 
-# 단독 실행 테스트용
+
+'''
 if __name__ == "__main__":
-    print("✅ DB 연결 테스트 시작")
+    print("✅ MongoDB 연결 테스트 시작")
+    print("컬렉션 목록:", db.list_collection_names())
 
-    # 1) 엔진으로 직접 연결 테스트
-    with engine.connect() as conn:
-        result = conn.execute(text("SELECT COUNT(*) FROM genres"))
-        count = result.scalar()
-        print(f"🎵 genres 테이블에 레코드 개수: {count}")
+    print("예시 - surveyresponses 첫 문서:")
+    print(db["surveyresponses"].find())
+    print(list(db["surveyresponses"].find()))
 
-    # 2) 세션으로도 한 번 테스트
-    db = SessionLocal()
-    try:
-        result = db.execute(text("SELECT * FROM genres"))
-        rows = result.fetchall()
-        print("🎧 genres 내용:")
-        for row in rows:
-            print(row)
-    finally:
-        db.close()
-
-    print("✅ DB 테스트 완료")
+    print("✅ MongoDB 테스트 완료") '''

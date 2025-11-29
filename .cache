@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 {"access_token": "BQA0Cty46dVa2I9VJpf-JXrIVMdyGi9LvfuVBV8pVWwwIzD5EXVP6b_yfIxKrdL7XFNA7h_d2BmtMPcDu_5prJmWJppDv7Cpt5zCyg2BJre12kGMzZpkn7cLhaHFr9N3bOSrS2YwtSM", "token_type": "Bearer", "expires_in": 3600, "expires_at": 1764408960}
+=======
+{"access_token": "BQBQuq0a6LoqZxQHw-ALgYVKF1JD70AKgMD4jAclmQfeLJy43akkyIxQ2e-BgVHvtpDwydTqTVj7NYLPHYFfj8YTLl54_1n7ScswmeRYmw9aaONxsAlpDhARp0-1AcHVVZaz6Mucd20", "token_type": "Bearer", "expires_in": 3600, "expires_at": 1764434805}
+>>>>>>> develop
