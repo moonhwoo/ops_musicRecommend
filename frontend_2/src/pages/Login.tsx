@@ -15,7 +15,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
 
   /** -----------------------------
-   *  2) Spotify OAuth 상태 표시
+   *  2) Spotify OAuth 상태 표시용
    * ----------------------------- */
   const [spotifyName, setSpotifyName] = useState<string | null>(null)
 
@@ -26,13 +26,30 @@ export default function Login() {
   // 로그인 후 이동할 기본 경로
   const from = navState?.from || '/survey'
 
-  /** 마운트 시 Spotify 연동 상태 읽기 */
+  /* -----------------------------
+   *  OAuth 콜백 후 쿼리스트링에서
+   *  user_id / display_name 꺼내서
+   *  localStorage에 저장 + 화면 표시
+   *  (없으면 기존 localStorage에서 복구)
+   * ----------------------------- */
   useEffect(() => {
-    const name = localStorage.getItem('spotify_display_name')
-    if (name) {
-      setSpotifyName(name)
+    const params = new URLSearchParams(loc.search)
+
+    const displayName = params.get('display_name')
+    const spotifyUserId = params.get('user_id')
+
+    if (displayName) {
+      localStorage.setItem('spotify_display_name', displayName)
+      setSpotifyName(displayName)
+    } else {
+      const storedName = localStorage.getItem('spotify_display_name')
+      if (storedName) setSpotifyName(storedName)
     }
-  }, [])
+
+    if (spotifyUserId) {
+      localStorage.setItem('spotify_user_id', spotifyUserId)
+    }
+  }, [loc.search])
 
   /** (A) 기존 앱 로그인 처리 */
   async function onSubmitApp(e: FormEvent<HTMLFormElement>) {
