@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import User from "./models/User.js"
 import OpenAI from "openai";
 import crypto from "crypto";
+import chartRouter from "./routes/chart.js";
 
 dotenv.config();
 
@@ -14,6 +15,7 @@ console.log("✅ MongoDB connected");
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use("/api/chart", chartRouter); 
 
 
 import PlayLog from "./models/PlayLog.js";
