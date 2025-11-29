@@ -29,8 +29,21 @@ export default function TextChat() {
   const [songs, setSongs] = useState<Song[]>([])
   const [selectedSongIdx, setSelectedSongIdx] = useState<number | null>(null)
 
+  // ✅ 추가: 로그인 때 저장한 spotify_user_id를 들고 있을 상태
+  const [spotifyUserId, setSpotifyUserId] = useState<string | null>(null)
+
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const nav = useNavigate()
+
+  // ✅ 추가: 마운트 시 localStorage 에서 spotify_user_id 읽기
+  useEffect(() => {
+    const id = localStorage.getItem('spotify_user_id')
+    if (!id) {
+      console.warn('spotify_user_id 없음 → 로그인 페이지로 이동 권장')
+      // 필요하면 여기서 nav('/login') 같은 리다이렉트도 가능
+    }
+    setSpotifyUserId(id)
+  }, [nav])
 
   // 항상 마지막 메시지로 스크롤
   useEffect(() => {
@@ -43,6 +56,19 @@ export default function TextChat() {
     const text = input.trim()
     if (!text || sending) return
 
+    // ✅ 추가: spotify_user_id가 없으면 안내 메시지 띄우고 전송 막기
+    if (!spotifyUserId) {
+      setMsgs((m) => [
+        ...m,
+        {
+          role: 'assistant',
+          content:
+            'Spotify 로그인이 필요합니다. 메인 화면에서 Spotify로 먼저 로그인해 주세요.',
+        },
+      ])
+      return
+    }
+
     setInput('')
 
     const nextMsgs: Msg[] = [...msgs, { role: 'user', content: text }]
@@ -50,7 +76,12 @@ export default function TextChat() {
     setSending(true)
 
     try {
-      const { reply, songs: newSongs } = await getReply(text, nextMsgs)
+      // ✅ 변경: getReply 호출 시 spotifyUserId를 함께 전달
+      const { reply, songs: newSongs } = await getReply(
+        text,
+        nextMsgs,
+        spotifyUserId,
+      )
 
       setMsgs((m) => [...m, { role: 'assistant', content: reply }])
       setSongs(newSongs ?? [])
@@ -70,7 +101,7 @@ export default function TextChat() {
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.nativeEvent.isComposing) return;      // 한글 조합 중엔 무시
+    if (e.nativeEvent.isComposing) return // 한글 조합 중엔 무시
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       onSend()
@@ -365,11 +396,14 @@ export default function TextChat() {
   )
 }
 
+// ✅ 변경: spotifyUserId를 인자로 추가하고, payload에 user_id로 포함
 async function getReply(
   userText: string,
   history: Msg[],
+  spotifyUserId: string | null,
 ): Promise<ChatApiResponse> {
   const payload = {
+    user_id: spotifyUserId, // 백엔드에서 이 user_id로 유저 프로필/설문 조회 가능
     messages: [
       ...history.map((m) => ({ role: m.role, content: m.content })),
       { role: 'user', content: userText },

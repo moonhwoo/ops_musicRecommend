@@ -37,7 +37,6 @@ def recommend(analysis_json: str) -> List[Dict[str, Any]]:
     data = resp.json()
     return data.get("songs", [])
 
-
 def chat(
     messages: List[Dict[str, str]],
     user_id: Optional[str] = None,

@@ -134,6 +134,7 @@ def recommend_endpoint(req: RecommendRequest) -> RecommendResponse:
 
 @app.post("/chat", response_model=ChatResponse)
 def chat_endpoint(req: ChatRequest) -> ChatResponse:
+    print("🔥 /chat user_id =", req.user_id)
     """
     React TextChat에서 사용하기 좋은 통합 채팅 엔드포인트.
     - messages: [{role, content}] 리스트
@@ -169,7 +170,7 @@ def chat_endpoint(req: ChatRequest) -> ChatResponse:
     if req.user_id:
         # req.user_id 는 Spotify user id 문자열
         user_profile = load_user_profile(req.user_id)
-
+    print("🔥 loaded user_profile =", user_profile)
     # 2) 추천 + Spotify 링크
     songs = recommend_songs_via_openai_logic(
         analysis_json,

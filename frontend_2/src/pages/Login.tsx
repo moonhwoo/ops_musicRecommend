@@ -16,7 +16,6 @@ export default function Login() {
 
   /** -----------------------------
    *  2) Spotify OAuth 상태 표시용
-   *     (토큰/이름은 localStorage에 있다고 가정)
    * ----------------------------- */
   const [spotifyName, setSpotifyName] = useState<string | null>(null)
 
@@ -27,16 +26,33 @@ export default function Login() {
   const from = navState?.from || '/survey'
 
   /* -----------------------------
-   *  마운트 시 Spotify 연동 상태 읽기
-   *  (Nearby나 다른 페이지에서 OAuth 완료 후
-   *   localStorage에 저장해 두었다고 가정)
+   *  OAuth 콜백 후 쿼리스트링에서
+   *  user_id / display_name 꺼내서
+   *  localStorage에 저장 + 화면 표시
    * ----------------------------- */
   useEffect(() => {
-    const name = localStorage.getItem('spotify_display_name')
-    if (name) setSpotifyName(name)
-  }, [])
+    const params = new URLSearchParams(loc.search)
 
-   {/*  (A) 기존 앱 로그인 처리   */}
+    const displayName = params.get('display_name')
+    const spotifyUserId = params.get('user_id')
+
+    // 1) URL에 display_name 이 있으면 → 그걸 사용
+    if (displayName) {
+      localStorage.setItem('spotify_display_name', displayName)
+      setSpotifyName(displayName)
+    } else {
+      // 2) 없으면 → 기존 localStorage 값으로 복구
+      const storedName = localStorage.getItem('spotify_display_name')
+      if (storedName) setSpotifyName(storedName)
+    }
+
+    // 3) spotify_user_id가 있으면 → localStorage에 저장
+    if (spotifyUserId) {
+      localStorage.setItem('spotify_user_id', spotifyUserId)
+    }
+  }, [loc.search])
+
+  /**  (A) 기존 앱 로그인 처리   */
   async function onSubmitApp(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setErr(null)
@@ -64,7 +80,7 @@ export default function Login() {
   const handleSpotifyLogin = () => {
     window.location.href = 'http://127.0.0.1:4000/login'
   }
-  
+
   return (
     <div style={{ maxWidth: 420, margin: '60px auto', display: 'grid', gap: 24 }}>
       {/* 1) 기존 앱 로그인          */}
