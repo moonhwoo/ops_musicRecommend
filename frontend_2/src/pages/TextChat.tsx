@@ -22,6 +22,8 @@ type ChatApiResponse = {
 
 const CHAT_API_URL = 'http://127.0.0.1:8000/chat'
 
+const GREEN = '#15803d'
+
 export default function TextChat() {
   const [input, setInput] = useState('')
   const [msgs, setMsgs] = useState<Msg[]>([])
@@ -123,15 +125,16 @@ export default function TextChat() {
         height: '100svh',
         display: 'grid',
         gridTemplateRows: 'auto minmax(0, 1fr) auto',
-        background: '#f3f4fb',
+        background: '#121212',
+        color: '#e5e7eb',
       }}
     >
       {/* 상단바 */}
       <header
         style={{
-          borderBottom: '1px solid #e2e2e2',
+          borderBottom: '1px solid #27272f',
           padding: '12px 16px',
-          background: '#fff',
+          background: '#181818',
           display: 'flex',
           alignItems: 'center',
           gap: 12,
@@ -139,21 +142,22 @@ export default function TextChat() {
       >
         <button
           onClick={goHome}
-          aria-label="메인으로"
-          title="메인으로"
+          aria-label="홈으로"
+          title="홈으로"
           style={{
             padding: '6px 10px',
             borderRadius: 8,
-            border: '1px solid #ddd',
-            background: '#f7f7f7',
+            border: '1px solid #374151',
+            background: '#111827',
+            color: '#e5e7eb',
             cursor: 'pointer',
           }}
         >
-          ← 메인으로
+          ← 홈으로
         </button>
         <b>텍스트 챗봇</b>
-        <span style={{ color: '#666', marginLeft: 8 }}>
-          / 대화는 현재 세션에만 저장됩니다
+        <span style={{ color: '#9ca3af', marginLeft: 8, fontSize: 12 }}>
+          대화는 기록에 남지 않아요
         </span>
       </header>
 
@@ -163,12 +167,13 @@ export default function TextChat() {
           display: 'grid',
           gridTemplateRows: 'minmax(0, 3fr) minmax(0, 2fr)',
           gap: 0,
+          minHeight: 0,
         }}
       >
         {/* 대화 로그 */}
         <div
           style={{
-            background: '#f3f4fb',
+            background: '#121212',
             padding: '0 16px',
             minHeight: 0,
           }}
@@ -188,10 +193,10 @@ export default function TextChat() {
             }}
           >
             {msgs.length === 0 ? (
-              <div style={{ color: '#888', marginTop: 8 }}>
+              <div style={{ color: '#9ca3af', marginTop: 8, fontSize: 14 }}>
                 지금 기분이나 상황을 편하게 적어보면,
                 <br />
-                감정 분석 + 노래 추천을 함께 해줄게요.
+                감정 분석과 함께 노래 추천을 해줄게요.
               </div>
             ) : (
               <div
@@ -208,14 +213,19 @@ export default function TextChat() {
                       alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
                       maxWidth: '80%',
                       width: 'fit-content',
-                      background: m.role === 'user' ? '#e3edff' : '#ffffff',
-                      border: '1px solid #e5e5e5',
+                      background:
+                        m.role === 'user' ? '#052e16' : '#111827',
+                      border:
+                        m.role === 'user'
+                          ? `1px solid ${GREEN}`
+                          : '1px solid #374151',
                       borderRadius: 14,
                       padding: '10px 12px',
                       whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word',
                       lineHeight: 1.5,
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                      boxShadow: '0 4px 8px rgba(0,0,0,0.5)',
+                      fontSize: 14,
                     }}
                   >
                     {m.content}
@@ -230,8 +240,8 @@ export default function TextChat() {
         {songs.length > 0 && (
           <section
             style={{
-              borderTop: '1px solid #e2e2e2',
-              background: '#fdfdfd',
+              borderTop: '1px solid #27272f',
+              background: '#0b1120',
               padding: '10px 16px 12px',
               display: 'grid',
               gridTemplateRows: 'minmax(0, 1.6fr) auto',
@@ -250,7 +260,7 @@ export default function TextChat() {
                 style={{
                   fontSize: 13,
                   margin: 0,
-                  color: '#555',
+                  color: '#bbf7d0',
                 }}
               >
                 이번 대화에서 추천된 곡
@@ -276,11 +286,12 @@ export default function TextChat() {
                     borderRadius: 10,
                     border:
                       idx === selectedSongIdx
-                        ? '1px solid #2f6bff'
-                        : '1px solid #e0e0e0',
+                        ? `1px solid ${GREEN}`
+                        : '1px solid #374151',
                     background:
-                      idx === selectedSongIdx ? '#eef3ff' : '#ffffff',
+                      idx === selectedSongIdx ? '#052e16' : '#020617',
                     cursor: 'pointer',
+                    color: '#e5e7eb',
                   }}
                 >
                   <div
@@ -291,9 +302,11 @@ export default function TextChat() {
                     }}
                   >
                     {s.title}{' '}
-                    <span style={{ color: '#777' }}>- {s.artist}</span>
+                    <span style={{ color: '#9ca3af' }}>- {s.artist}</span>
                   </div>
-                  <div style={{ fontSize: 11, color: '#555' }}>{s.reason}</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                    {s.reason}
+                  </div>
                   {s.link && (
                     <div style={{ marginTop: 2, fontSize: 11 }}>
                       <a
@@ -301,7 +314,7 @@ export default function TextChat() {
                         target="_blank"
                         rel="noreferrer"
                         style={{
-                          color: '#2f6bff',
+                          color: '#6ee7b7',
                           textDecoration: 'underline',
                         }}
                       >
@@ -319,7 +332,8 @@ export default function TextChat() {
                   marginTop: 4,
                   borderRadius: 12,
                   overflow: 'hidden',
-                  boxShadow: '0 4px 10px rgba(0,0,0,0.08)',
+                  boxShadow: '0 4px 10px rgba(0,0,0,0.5)',
+                  border: `1px solid ${GREEN}`,
                 }}
               >
                 <iframe
@@ -339,9 +353,9 @@ export default function TextChat() {
       {/* 입력 영역 */}
       <footer
         style={{
-          borderTop: '1px solid #e2e2e2',
+          borderTop: '1px solid #27272f',
           padding: 12,
-          background: '#fff',
+          background: '#181818',
           position: 'sticky',
           bottom: 0,
           zIndex: 10,
@@ -367,8 +381,11 @@ export default function TextChat() {
               padding: 8,
               height: 40,
               borderRadius: 8,
-              border: '1px solid #ddd',
+              border: '1px solid #374151',
               fontFamily: 'inherit',
+              background: '#020617',
+              color: '#f9fafb',
+              fontSize: 14,
             }}
           />
           <button
@@ -379,12 +396,14 @@ export default function TextChat() {
               minWidth: 96,
               padding: '0 14px',
               borderRadius: 8,
-              border: '1px solid #2c68ff',
+              border: `1px solid ${GREEN}`,
               background:
-                sending || !input.trim() ? '#cdd9ff' : '#2f6bff',
-              color: '#fff',
+                sending || !input.trim() ? '#052e16' : GREEN,
+              color: '#f9fafb',
               cursor:
                 sending || !input.trim() ? 'not-allowed' : 'pointer',
+              fontWeight: 600,
+              fontSize: 14,
             }}
             title="보내기"
           >

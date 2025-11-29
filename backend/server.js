@@ -3,6 +3,9 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import User from "./models/User.js"
+import OpenAI from "openai";
+import crypto from "crypto";
+import chartRouter from "./routes/chart.js";
 
 dotenv.config();
 
@@ -12,9 +15,14 @@ console.log("✅ MongoDB connected");
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use("/api/chart", chartRouter); 
 
 
 import PlayLog from "./models/PlayLog.js";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 
 //클라이언트가 곡 정보+위치를 직접 보내서 저장 (수동저장)
@@ -52,7 +60,8 @@ app.get("/api/stats/popular", async (req, res) => {
   try {
     const lat = parseFloat(req.query.lat);
     const lng = parseFloat(req.query.lng);
-    const radiusKm = Math.min(parseFloat(req.query.radius_km) || 5, 50);
+    const rawRadius = parseFloat(req.query.radius_km) || 5;
+    const radiusKm = Math.min(Math.max(rawRadius, 0.01), 50);
     const windowD = Math.min(parseInt(req.query.window_d || "1", 10), 90); //최대 90일(3개월)
     const limit = Math.min(parseInt(req.query.limit || "10", 10), 50);
 
@@ -207,6 +216,198 @@ redirectUrl.searchParams.set("display_name", displayName);
 return res.redirect(redirectUrl.toString());
 });
 
+  // Spotify 클라이언트 크레덴셜 토큰 받기 (앱용 토큰)
+let spotifyAppToken = null;
+let spotifyAppTokenExpiresAt = 0;
+
+async function getSpotifyAppToken() {
+  const now = Date.now();
+  if (spotifyAppToken && now < spotifyAppTokenExpiresAt - 60_000) {
+    return spotifyAppToken;
+  }
+
+  const resp = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization:
+        "Basic " +
+        Buffer.from(
+          process.env.SPOTIFY_CLIENT_ID + ":" + process.env.SPOTIFY_CLIENT_SECRET
+        ).toString("base64"),
+    },
+    body: "grant_type=client_credentials",
+  });
+
+  const data = await resp.json();
+  if (!resp.ok) {
+    console.error("Spotify token error:", data);
+    throw new Error("spotify_auth_error");
+  }
+
+  spotifyAppToken = data.access_token;
+  spotifyAppTokenExpiresAt = Date.now() + data.expires_in * 1000;
+  return spotifyAppToken;
+}
+
+// Spotify에서 트랙 하나 찾는 함수
+async function searchSpotifyTrack(candidate) {
+  const { title, artist, reason } = candidate;
+  const token = await getSpotifyAppToken();
+
+  // 조금 더 정확하게 검색
+  const q = encodeURIComponent(`track:${title} artist:${artist}`);
+  const url = `https://api.spotify.com/v1/search?q=${q}&type=track&limit=3`;
+
+  const resp = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await resp.json();
+  if (!resp.ok) {
+    console.error("Spotify search error:", data);
+    return null;
+  }
+
+  const items = data.tracks?.items || [];
+  if (!items.length) return null;
+
+  const t = items[0];
+
+  // --- GPT가 말한 제목/아티스트랑 너무 동떨어지면 버리기 ---
+  const spTitle = (t.name || "").toLowerCase();
+  const spArtists = (t.artists || [])
+    .map((a) => a.name.toLowerCase())
+    .join(" ");
+
+  const candTitle = (title || "").toLowerCase();
+  const candArtist = (artist || "").toLowerCase();
+
+  const firstWord = (s) => s.split(/\s+/)[0] || "";
+
+  const titleMatch =
+    candTitle && spTitle.includes(firstWord(candTitle));
+  const artistMatch =
+    candArtist && spArtists.includes(firstWord(candArtist));
+
+  if (!titleMatch && !artistMatch) {
+    // 너무 안 맞으면 이 후보는 아예 제외
+    return null;
+  }
+
+  // 🔥 화면에 보여줄 title/artist는 "실제 Spotify 트랙" 기준으로 사용
+  return {
+    title: t.name,
+    artist: t.artists.map((a) => a.name).join(", "),
+    reason, // GPT reason 그대로
+    trackId: t.id,
+    uri: t.uri,
+    link: t.external_urls?.spotify,
+    preview_url: t.preview_url,
+    albumArt: t.album?.images?.[0]?.url,
+    embed_url: `https://open.spotify.com/embed/track/${t.id}`,
+  };
+}
+
+// 🌤️ 날씨 기반 노래 추천 (GPT + Spotify 필터링)
+app.post("/api/weather-recommend", async (req, res) => {
+  try {
+    const { city, weather } = req.body;
+    // weather: { temp, wind, clouds, precip, ... }
+
+    if (!weather || typeof weather.temp !== "number") {
+      return res.status(400).json({ error: "weather_required" });
+    }
+
+    const prompt = `
+You are a music expert. Recommend 12 real songs that match the following conditions.
+
+⚠ Very important:
+- You should recommend songs based on weather information.
+ Temperature = ${weather.temp} degrees Celsius, wind =  ${weather.wind} m/s, 
+ clouds  = ${weather.clouds}%, precipitation = ${weather.precip}mm.
+- Only recommend songs that ACTUALLY EXIST on Spotify.
+- Never invent fake songs or fake artists.
+- Write the exact title and exact artist name.
+- Do not translate or modify the song title.
+- Return only songs that are verifiable via Spotify search.
+- You should recommend popular English pop songs and popular j-pop songs
+
+Recommend 5 popular English pop songs.
+Recommend 7 Korean songs.
+
+Output as JSON array like:
+[
+  { "title": "Song Name", "artist": "Artist", "reason": "왜 추천하는지" }
+]
+
+
+설명 문장 없이 JSON만 출력해.
+`.trim();
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1", // 네 계정 상황에 맞게
+      messages: [
+        {
+          role: "system",
+          content:
+            "너는 사용자의 날씨와 분위기에 맞춰 노래를 추천해주는 음악 큐레이터야.",
+        },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.8,
+    });
+
+    const text = completion.choices[0]?.message?.content || "[]";
+
+    let candidates = [];
+    try {
+      candidates = JSON.parse(text);
+    } catch (e) {
+      console.error("JSON parse error:", e, text);
+      candidates = [];
+    }
+
+    if (!Array.isArray(candidates)) {
+      candidates = [];
+    }
+
+    // GPT가 준 후보들에 대해 Spotify에서 실제로 존재하는 트랙만 필터
+    const checked = await Promise.all(
+      candidates.map(async (c) => {
+        if (!c.title || !c.artist) return null;
+        const base = await searchSpotifyTrack(c);
+        if (!base) return null;
+        // GPT가 준 reason 붙이기
+        return { ...base, reason: c.reason || "" };
+      })
+    );
+
+    const valid = checked.filter((x) => x !== null);
+
+    // 유효한 곡 없을 때
+    if (valid.length == 0){
+      return res.json({songs: [] });
+    }
+    /*랜덤 인덱스 하나 뽑기
+    const idx = Math.floor(Math.random() * valid.length);
+    const picked = valid[idx]
+    return res.json({ songs: [picked] });*/
+
+    // 랜덤 인덱스 3개 뽑기
+    const shuffled = [...valid].sort(() => Math.random() - 0.5);
+    const top3 = shuffled.slice(0, 3);
+    return res.json({ songs: top3 });
+
+    /* 여기서 상위 3개만 선택
+    const top3 = valid.slice(0, 3);
+    return res.json({ songs: top3 });*/
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "server_error" });
+  }
+});
+
 
 // 현재 재생 중인 곡 정보
 app.get("/currently-playing", async (req, res) => {
@@ -307,7 +508,8 @@ app.get("/api/now/nearby", async (req, res) => {
   try {
     const lat = parseFloat(req.query.lat);
     const lng = parseFloat(req.query.lng);
-    const radiusKm = Math.min(parseFloat(req.query.radius_km) || 2, 20);
+    const rawRadius = parseFloat(req.query.radius_km) || 2;
+    const radiusKm = Math.min(Math.max(rawRadius, 0.01), 20);
     const windowSec = Math.min(parseInt(req.query.window_s || "120", 10), 600);
     const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
 
@@ -477,6 +679,60 @@ app.post("/api/survey", async (req, res) => {
 });
 
 
+// 🌤️ 오늘 날씨 기반 노래 추천
+app.post("/api/weather-recommend", async (req, res) => {
+  try {
+    const { city, weather } = req.body;
+    // weather: { temp, wind, clouds, precip }
+
+    if (!weather || typeof weather.temp !== "number") {
+      return res.status(400).json({ error: "weather_required" });
+    }
+
+    const prompt = `
+지금 나는 ${city || "어느 도시"}에 있고,
+기온은 약 ${weather.temp}도, 바람은 ${weather.wind} m/s,
+구름은 ${weather.clouds}%, 강수(1h)는 ${weather.precip}mm 정도인 날씨야.
+
+이 날씨에 어울리는 한국 대중음악 10곡을 JSON 형식으로 추천해줘.
+각 항목은 다음 필드를 가져야 해.
+
+[
+  {"title": "...", "artist": "...", "reason": "..."},
+  ...
+]
+
+설명 말고 JSON만 출력해.
+`.trim();
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-mini", // 계정에 맞게 모델명 바꿔도 됨
+      messages: [
+        {
+          role: "system",
+          content: "너는 사용자의 날씨와 분위기에 맞춰 노래를 추천해주는 음악 큐레이터야.",
+        },
+        { role: "user", content: prompt },
+      ],
+    });
+
+    const text = completion.choices[0]?.message?.content || "[]";
+
+    let songs = [];
+    try {
+      songs = JSON.parse(text);
+    } catch (e) {
+      console.error("JSON parse error:", e, text);
+      // 망했으면 그냥 빈 배열로
+      songs = [];
+    }
+
+    res.json({ songs });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "server_error" });
+  }
+});
 
 
 
