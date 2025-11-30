@@ -87,7 +87,7 @@ def classify_situation(text: str) -> str:
         return "healing"   # 위로/힐링
 
     # 2) 이별/연애 모드
-    breakup_keywords = ["이별", "헤어졌", "차였", "실연", "전여친", "전 남친", "전남친", "전여자친구", "전남자친구"]
+    breakup_keywords = ["이별", "헤어졌", "차였", "실연", "전여친", "전 남친", "전남친", "전여자친구", "전남자친구","새벽"]
     if any(k in t for k in breakup_keywords):
         return "breakup"
 
@@ -232,6 +232,14 @@ emotion 구조는 대략 다음과 같다:
 - situation == "workout" 인 경우:
   - BPM이 빠르고, 에너지가 느껴지는 곡 위주로 추천해라.
 
+- 곡을 선택할 때는 다음 우선순위를 지켜라:
+  1순위: situation 과 잘 맞는지 여부
+  2순위: emotion.mood_top1_en 과 mood_top2_en 에 맞는 분위기인지
+  3순위: user_profile 의 favorite_genres, favorite_artists, preferred_year_category
+
+  같은 아티스트의 대표곡이라도 situation 이 맞지 않으면 추천하지 마라.
+  예를 들어 situation 이 "focus" 인데, 이별 발라드 곡은 추천하지 않는다.    
+
 user_profile의 구조는 대략 다음과 같다:
 {
   "user_id": string,
@@ -256,8 +264,10 @@ user_profile의 구조는 대략 다음과 같다:
 2. favorite_genres에 포함된 장르를 우선 고려하되,
    한 장르만 반복하지 말고 전체 20곡 중 최소 2~3개 장르를 섞어라.
 
-3. favorite_artists에 있는 1등 2등 3등 가수의 곡을 전부 섞되,
-   전체를 그 가수로만 채우지는 말아라(15곡 정도만).
+3. favorite_artists에 있는 가수들의 곡은
+   - 각 아티스트당 최대 4곡까지만 넣어라.
+   - 전체 20곡 중 favorite_artists 관련 곡은 최대 12곡까지만 넣어라.
+   - 같은 곡 제목은 절대 두 번 이상 추천하지 마라.
 
 4. preferred_year_category가 특정 시대("1990s", "2000s" 등)라면,
    가능한 한 그 시대 곡을 중심으로 추천하고 ALL일 경우는 시대에 상관없이 하되,
