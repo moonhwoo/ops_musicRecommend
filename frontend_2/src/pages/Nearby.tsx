@@ -221,7 +221,7 @@ export default function Nearby() {
           onClick={() => nav('/main')}
           className="rounded-md border border-emerald-600 px-3 py-1 text-sm text-emerald-300 hover:bg-[#052e16] transition"
         >
-          ← 메인으로
+          ← 홈으로
         </button>
         <h2 className="text-base font-semibold text-emerald-200">
           내 주변 인기 음악

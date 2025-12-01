@@ -72,6 +72,9 @@ export default function Survey() {
 
     const data = await res.json();
     if (data.ok) {
+      // 설문 완료 플래그 저장
+      localStorage.setItem("survey_done", "1");
+      // 메인 페이지로 이동
       window.location.href = "/main";
     } else {
       alert("설문 저장 실패");
