@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List
 
-from database.database import get_db
+from chatbot.database import get_db
 
 
 def load_user_profile(spotify_user_id: str) -> Dict[str, Any]:
