@@ -221,10 +221,10 @@ export default function Nearby() {
           onClick={() => nav('/main')}
           className="rounded-md border border-emerald-600 px-3 py-1 text-sm text-emerald-300 hover:bg-[#052e16] transition"
         >
-          ← 메인으로
+          ← 홈으로
         </button>
         <h2 className="text-base font-semibold text-emerald-200">
-          내 주변 인기 음악
+          내 주변 인기곡
         </h2>
       </div>
 
@@ -521,10 +521,18 @@ export default function Nearby() {
                 onChange={() => setShareOn((v) => !v)}
                 style={{ accentColor: GREEN }}
               />
-              <span>주변 사람들과 지금 듣는 노래 공유하기</span>
+              <span
+                style={{
+                  fontSize: 18,
+                  fontWeight: 600,
+                  color: '#bbf7d0',
+                }}
+              >
+                주변 사람들과 지금 듣는 노래 공유하기
+              </span>
             </label>
-            <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
-              ON 시, 현재 듣는 노래와 위치가 10초마다 업데이트됩니다.
+            <p style={{ fontSize: 12, marginTop: 4 }}>
+              ↑ 체크박스 ON 시, 현재 듣는 노래와 위치가 10초마다 업데이트됩니다.
             </p>
           </div>
 

@@ -1,34 +1,15 @@
-export type LoginResult = { token: string; name: string }
+// Spotify 기반 로그인만 사용하도록 변경
+// - access_token / user_id / display_name 은 App.tsx, Login.tsx 등에서 localStorage에 저장
 
-export async function login(
-  username: string,
-  password: string,
-): Promise<LoginResult> {
-  // 데모용 로그인
-  await new Promise((r) => setTimeout(r, 300))
-  if (username === 'demo' && password === 'pass1234') {
-    return { token: 'demo-token', name: 'Demo User' }
-  }
-  throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.')
-}
-
-export function saveSession(r: LoginResult) {
-  localStorage.setItem('auth_token', r.token)
-  localStorage.setItem('auth_name', r.name)
-}
-
-export function clearSession() {
-  localStorage.removeItem('auth_token')
-  localStorage.removeItem('auth_name')
-}
-
-// 기존 앱 로그인 또는 Spotify 로그인 둘 중 하나라도 true면 로그인으로 간주
-export function isLoggedIn() {
-  const hasAppSession = !!localStorage.getItem('auth_token')
+// 현재 Spotify 로그인 여부
+export function isLoggedIn(): boolean {
   const hasSpotifyToken = !!localStorage.getItem('spotify_access_token')
-  return hasAppSession || hasSpotifyToken
+  return hasSpotifyToken
 }
 
-export function currentUserName() {
-  return localStorage.getItem('auth_name')
+// 로그아웃용 세션 정리
+export function clearSession() {
+  localStorage.removeItem('spotify_access_token')
+  localStorage.removeItem('spotify_user_id')
+  localStorage.removeItem('spotify_display_name')
 }

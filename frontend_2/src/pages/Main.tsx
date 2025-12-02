@@ -178,9 +178,26 @@ export default function Main() {
             {!songsLoading && songs.length > 0 && (
               <ul className="mt-4 grid gap-3 text-sm">
                 {songs.map((s, idx) => (
-                  <li key={idx} className="rounded-xl border border-[#27272f] bg-[#111827] p-3 text-left">
-                    <div className="font-semibold">{idx + 1}. {s.title} - {s.artist}</div>
-                    <div className="mt-1 text-xs text-gray-400">{s.reason}</div>
+                  <li
+                    key={idx}
+                    onClick={() => {
+                      if (!s.trackId) {
+                        console.warn('trackId가 없어서 재생할 수 없어요:', s)
+                        return
+                      }
+                      setPlayingTrack(s.trackId)
+                    }}
+                    className="cursor-pointer rounded-xl border border-[#27272f] bg-[#111827] p-3 text-left transition hover:bg-[#1f2933] hover:scale-[1.01]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-semibold text-emerald-200">
+                          {idx + 1}. {s.title} - {s.artist}
+                        </div>
+                        <div className="mt-1 text-xs text-gray-400">{s.reason}</div>
+                      </div>
+                      <span className="ml-2 shrink-0 text-sm text-emerald-400">▶</span>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -201,7 +218,7 @@ export default function Main() {
                 <h2 className="mb-2 text-lg font-semibold text-emerald-200">내 주변 인기곡</h2>
                 <p className="text-sm text-gray-300">근처 사람들은 뭘 들을까요?</p>
               </div>
-              <button onClick={goNearby} className="mt-4 w-full rounded-lg border border-emerald-600 py-2 text-sm font-semibold text-emerald-200 hover:bg-[#052e16]">📍 노래 탐색</button>
+              <button onClick={goNearby} className="mt-4 w-full rounded-lg bg-emerald-600 py-2 text-sm font-semibold hover:bg-emerald-500">📍 노래 탐색</button>
             </div>
           </section>
         </div>
