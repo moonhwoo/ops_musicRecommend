@@ -65,8 +65,11 @@ export default function Login() {
     const surveyDone = localStorage.getItem('survey_done') === '1'
     // 기본 이동 경로: 설문 완료면 메인, 아니면 설문
     const defaultTarget = surveyDone ? '/main' : '/survey'
-    // ProtectedRoute에서 넘어온 경우 그 페이지로 우선 이동
-    const target = navState?.from ?? defaultTarget
+    // 설문을 이미 한 사람만 ProtectedRoute에서 넘어온 경우 그 페이지로 우선 이동
+    const target =
+      surveyDone && navState?.from
+        ? navState.from
+        : defaultTarget
 
     nav(target)
   }

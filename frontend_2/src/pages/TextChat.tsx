@@ -132,9 +132,9 @@ export default function TextChat() {
       {/* 상단바 */}
       <header
         style={{
-          borderBottom: '1px solid #27272f',
+          borderBottom: '1px solid #1f2937',
           padding: '12px 16px',
-          background: '#181818',
+          background: '#0b0f13',
           display: 'flex',
           alignItems: 'center',
           gap: 12,
@@ -146,17 +146,19 @@ export default function TextChat() {
           title="홈으로"
           style={{
             padding: '6px 10px',
-            borderRadius: 8,
-            border: '1px solid #374151',
-            background: '#111827',
-            color: '#e5e7eb',
+            borderRadius: 6,
+            border: '1px solid #059669',
+            background: 'transparent',
+            color: '#a7f3d0',
             cursor: 'pointer',
           }}
         >
           ← 홈으로
         </button>
-        <b>텍스트 챗봇</b>
-        <span style={{ color: '#9ca3af', marginLeft: 8, fontSize: 12 }}>
+        <span style={{ fontSize: 16, fontWeight: 600, color: '#bbf7d0' }}>
+          텍스트 추천
+        </span>
+        <span style={{ color: '#9ca3af', marginLeft: 8, fontSize: 13 }}>
           대화는 기록에 남지 않아요
         </span>
       </header>
@@ -193,7 +195,7 @@ export default function TextChat() {
             }}
           >
             {msgs.length === 0 ? (
-              <div style={{ color: '#9ca3af', marginTop: 8, fontSize: 14 }}>
+              <div style={{ marginTop: 8, fontSize: 14 }}>
                 지금 기분이나 상황을 편하게 적어보면,
                 <br />
                 감정 분석과 함께 노래 추천을 해줄게요.
@@ -383,11 +385,19 @@ export default function TextChat() {
               borderRadius: 8,
               border: '1px solid #374151',
               fontFamily: 'inherit',
-              background: '#020617',
+              background: '#052e16',
               color: '#f9fafb',
               fontSize: 14,
             }}
           />
+          <style>
+            {`
+              textarea::placeholder {
+                color: #ffffff;
+                opacity: 0.8;    // 약간 흐리게
+              }
+            `}
+          </style>
           <button
             onClick={onSend}
             disabled={sending || !input.trim()}
@@ -397,11 +407,11 @@ export default function TextChat() {
               padding: '0 14px',
               borderRadius: 8,
               border: `1px solid ${GREEN}`,
-              background:
-                sending || !input.trim() ? '#052e16' : GREEN,
+              background: GREEN,
               color: '#f9fafb',
               cursor:
                 sending || !input.trim() ? 'not-allowed' : 'pointer',
+              opacity: sending || !input.trim() ? 0.7 : 1,
               fontWeight: 600,
               fontSize: 14,
             }}
