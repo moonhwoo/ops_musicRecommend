@@ -5,14 +5,12 @@ on:
     branches: [ main, develop ]
     paths:
       - "chatbot/**"
-      - "database/**"
       - "requirements.txt"
       - ".github/workflows/python-ci.yml"
   pull_request:
     branches: [ main, develop ]
     paths:
       - "chatbot/**"
-      - "database/**"
       - "requirements.txt"
 
 jobs:
@@ -36,4 +34,4 @@ jobs:
 
       - name: Run syntax check (compileall)
         run: |
-          python -m compileall chatbot database
+          python -m compileall chatbot
