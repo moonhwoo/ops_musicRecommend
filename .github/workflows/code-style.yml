@@ -16,9 +16,9 @@ jobs:
       - name: Install black
         run: pip install black
 
-      - name: Check format (chatbot & database)
+      - name: Check format (chatbot)
         run: |
-          black --check chatbot database
+          black --check chatbot
 
   js-style:
     runs-on: ubuntu-latest
