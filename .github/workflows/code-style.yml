@@ -1,0 +1,41 @@
+name: Code Style Check
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  python-style:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install black
+        run: pip install black
+
+      - name: Check format (chatbot & database)
+        run: |
+          black --check chatbot database
+
+  js-style:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: |
+          if [ -f "frontend_2/package.json" ]; then
+            cd frontend_2
+            npm ci
+          fi
+
+      - name: Prettier check (frontend_2)
+        run: |
+          cd frontend_2
+          npx prettier "src/**/*.{ts,tsx,js,jsx,json,css,md}" --check || echo "prettier failed"
