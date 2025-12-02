@@ -198,8 +198,8 @@ def chat_endpoint(req: ChatRequest) -> ChatResponse:
 
     moods_str = ", ".join(f"{k}({v:.2f})" for k, v in mood_dict.items())
     lines: List[str] = []
-    lines.append(f"지금 글에서는 {moods_str} 같은 감정이 느껴져요.")
-    lines.append("이 분위기에 어울리는 곡들을 몇 곡 골라봤어요:\n")
+    
+    lines.append("지금 상황에 어울리는 곡들을 몇 곡 골라봤어요:\n")
 
     for s in songs_with_links[:5]:
         title = s.get("title", "")
