@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import json
 import os
-from typing import Any, Dict, List, Tuple,Optional
+from typing import Any, Dict, List, Tuple, Optional
 
 import difflib
 from dotenv import load_dotenv
@@ -12,8 +12,8 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from transformers import pipeline
 from keybert import KeyBERT
 import requests
-# 파일 맨 위 import 쪽에 추가
 
+# 파일 맨 위 import 쪽에 추가
 
 
 # =========================
@@ -30,21 +30,25 @@ SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
-    raise RuntimeError("SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET 환경 변수가 필요합니다.")
+    raise RuntimeError(
+        "SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET 환경 변수가 필요합니다."
+    )
 
 sp_auth = SpotifyClientCredentials(
     client_id=SPOTIFY_CLIENT_ID,
     client_secret=SPOTIFY_CLIENT_SECRET,
 )
 session = requests.Session()
-session.headers.update({
-    "Accept-Language": "ko-KR,ko;q=0.9",
-})
+session.headers.update(
+    {
+        "Accept-Language": "ko-KR,ko;q=0.9",
+    }
+)
 
 sp = spotipy.Spotify(
     auth_manager=sp_auth,
     requests_session=session,
-    )
+)
 
 # =========================
 # 감정 라벨 / 매핑
@@ -74,6 +78,7 @@ zsc = pipeline(
 KW_MODEL = "jhgan/ko-sroberta-multitask"
 kw = KeyBERT(KW_MODEL)
 
+
 def classify_situation(text: str) -> str:
     """
     사용자의 원문 텍스트를 보고 대략적인 상황을 분류한다.
@@ -82,17 +87,47 @@ def classify_situation(text: str) -> str:
     t = (text or "").lower()
 
     # 1) 위로/힐링 모드
-    heal_keywords = ["힘들", "지쳤", "우울", "힘빠지", "버겁", "수고했", "힘 빠져", "지치"]
+    heal_keywords = [
+        "힘들",
+        "지쳤",
+        "우울",
+        "힘빠지",
+        "버겁",
+        "수고했",
+        "힘 빠져",
+        "지치",
+    ]
     if any(k in t for k in heal_keywords):
-        return "healing"   # 위로/힐링
+        return "healing"  # 위로/힐링
 
     # 2) 이별/연애 모드
-    breakup_keywords = ["이별", "헤어졌", "차였", "실연", "전여친", "전 남친", "전남친", "전여자친구", "전남자친구","새벽"]
+    breakup_keywords = [
+        "이별",
+        "헤어졌",
+        "차였",
+        "실연",
+        "전여친",
+        "전 남친",
+        "전남친",
+        "전여자친구",
+        "전남자친구",
+        "새벽",
+    ]
     if any(k in t for k in breakup_keywords):
         return "breakup"
 
     # 3) 공부/집중 모드
-    focus_keywords = ["공부", "집중", "코딩", "과제", "숙제", "시험", "레포트", "프로젝트", "논문"]
+    focus_keywords = [
+        "공부",
+        "집중",
+        "코딩",
+        "과제",
+        "숙제",
+        "시험",
+        "레포트",
+        "프로젝트",
+        "논문",
+    ]
     if any(k in t for k in focus_keywords):
         return "focus"
 
@@ -102,7 +137,6 @@ def classify_situation(text: str) -> str:
         return "workout"
 
     return "general"
-
 
 
 # =========================
@@ -125,7 +159,7 @@ def analyze_text_logic(
         return {"unknown": 1.0}, [], "", "", ""
 
     situation = classify_situation(text)
-    
+
     # 제로샷 감정 분류
     res = zsc(
         text,
@@ -310,7 +344,7 @@ user_profile의 구조는 대략 다음과 같다:
 def recommend_songs_via_openai_logic(
     analysis_json: str,
     user_profile: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+) -> List[Dict[str, Any]]:
     """
     감정 분석 결과(analysis_json)를 기반으로 곡 추천 리스트를 반환.
     반환값: [{"title": ..., "artist": ..., "reason": ..., ...}, ...]
@@ -335,7 +369,7 @@ def recommend_songs_via_openai_logic(
     payload = {
         "emotion": info,
         "user_profile": user_profile or {},
-        }
+    }
 
     user_prompt_ko = f"""
 다음은 한 사용자의 감정 분석 정보와 평소 음악 취향 정보야.
@@ -424,7 +458,9 @@ def attach_spotify_links_logic(
 
             spotify_title = track.get("name", "")
             spotify_artists = track.get("artists", [])
-            spotify_main_artist = spotify_artists[0]["name"] if spotify_artists else artist
+            spotify_main_artist = (
+                spotify_artists[0]["name"] if spotify_artists else artist
+            )
 
             input_title_norm = _normalize(title)
             spotify_title_norm = _normalize(spotify_title)
@@ -439,7 +475,7 @@ def attach_spotify_links_logic(
                     f"(ratio={title_ratio:.2f}) → 스킵"
                 )
                 continue
-            
+
             print(
                 f"[Spotify] 매칭 성공 ✅ 입력='{title}' / Spotify='{spotify_title}' "
                 f"(ratio={title_ratio:.2f})"
