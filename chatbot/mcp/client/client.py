@@ -25,7 +25,9 @@ def analyze(text: str) -> Dict[str, Any]:
     return resp.json()
 
 
-def recommend(analysis_json: str, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+def recommend(
+    analysis_json: str, user_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
     if not analysis_json:
         return []
     payload: Dict[str, Any] = {"analysis_json": analysis_json}
@@ -36,6 +38,7 @@ def recommend(analysis_json: str, user_id: Optional[str] = None) -> List[Dict[st
     resp.raise_for_status()
     data = resp.json()
     return data.get("songs", [])
+
 
 def chat(
     messages: List[Dict[str, str]],

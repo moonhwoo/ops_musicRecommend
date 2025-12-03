@@ -55,7 +55,7 @@ def load_user_profile(spotify_user_id: str) -> Dict[str, Any]:
     for idx, name in enumerate(artist_names, start=1):
         favorite_artists.append(
             {
-                "rank": idx,         # 0,1,2 순위
+                "rank": idx,  # 0,1,2 순위
                 "name": name,
                 "spotify_id": None,  # 지금 Mongo에 없으므로 일단 None
             }
@@ -71,11 +71,12 @@ def load_user_profile(spotify_user_id: str) -> Dict[str, Any]:
         "favorite_artists": favorite_artists,
     }
 
-'''
+
+"""
 테스트 부분
 
 if __name__ == "__main__":
     test_id = "테스트할_spotify_user_id"
     profile = load_user_profile(test_id)
     print(profile)
-'''
+"""

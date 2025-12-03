@@ -12,4 +12,8 @@ ENV NODE_ENV=production
 
 EXPOSE 4000
 
+<<<<<<< HEAD
 CMD ["node", "server.js"]
+=======
+CMD ["node", "server.js"]
+>>>>>>> develop

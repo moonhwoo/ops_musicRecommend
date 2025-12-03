@@ -1,0 +1,41 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - "frontend_2/**"
+      - ".github/workflows/frontend-ci.yml"
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - "frontend_2/**"
+
+jobs:
+  frontend-ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        working-directory: frontend_2
+        run: npm ci
+
+      - name: Run tests (if exists)
+        working-directory: frontend_2
+        run: npm test --if-present
+
+      - name: Lint (if exists)
+        working-directory: frontend_2
+        run: npm run lint --if-present
+
+      - name: Build (확인용)
+        working-directory: frontend_2
+        run: npm run build
