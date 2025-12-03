@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: music-backend
     env_file:
-      - .env
+      - ./backend/.env
     ports:
       - "4000:4000"   # 브라우저에서 http://localhost:4000
     restart: unless-stopped
@@ -16,7 +16,7 @@ services:
       dockerfile: dockerfile   # 파일명이 소문자
     container_name: music-chatbot
     env_file:
-      - .env
+      - ./chatbot/.env
     ports:
       - "8000:8000"   # 브라우저에서 http://localhost:8000
     restart: unless-stopped

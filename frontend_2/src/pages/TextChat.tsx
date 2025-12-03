@@ -20,7 +20,8 @@ type ChatApiResponse = {
   songs?: Song[]
 }
 
-const CHAT_API_URL = 'http://127.0.0.1:8000/chat'
+const CHAT_API_URL =
+  (import.meta.env.VITE_CHATBOT_URL || 'http://localhost:8000') + '/chat'
 
 const GREEN = '#15803d'
 
