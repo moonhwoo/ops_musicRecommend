@@ -174,6 +174,8 @@ export default function Main() {
           {/* 날씨 추천 리스트 */}
           <section className="rounded-2xl bg-[#181818] p-5 text-center shadow-lg">
             <h2 className="mb-3 text-center text-lg font-semibold text-emerald-200">🎵 날씨 어울림 추천</h2>
+            {/* songsError 사용 */}
+            {songsError && (<p className="mb-2 text-sm text-red-400">{songsError}</p>)}
             {songsLoading && <p className="text-sm text-gray-400">불러오는 중…</p>}
             {!songsLoading && songs.length > 0 && (
               <ul className="mt-4 grid gap-3 text-sm">
