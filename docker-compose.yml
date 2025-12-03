@@ -1,0 +1,12 @@
+services:
+  frontend:
+    build:
+      context: ./frontend_2
+      dockerfile: Dockerfile
+    container_name: music-frontend-dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend_2:/app
+      - /app/node_modules
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

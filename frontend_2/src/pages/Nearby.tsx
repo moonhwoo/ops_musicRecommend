@@ -23,6 +23,16 @@ type NowItem = {
   lng: number
 }
 
+// API에서 내려오는 실시간 항목 타입 (loc.coordinates 포함)
+type ApiNowItem = {
+  userName?: string
+  title: string
+  artist: string
+  albumArt?: string
+  loc: { coordinates: [number, number] }
+  distance: number
+}
+
 const GREEN = '#15803d'
 
 export default function Nearby() {
@@ -102,8 +112,10 @@ export default function Nearby() {
         if (!res.ok) throw new Error('API error')
         const json = await res.json()
         setItems(json.items || [])
-      } catch (e: any) {
-        setErr(e.message)
+      } catch (e: unknown) {
+        // any 대신 unknown + 안전 처리
+        if (e instanceof Error) setErr(e.message)
+        else setErr('API error')
       } finally {
         setLoading(false)
       }
@@ -159,15 +171,18 @@ export default function Nearby() {
         )
         const data = await res.json()
 
-        const mapped = (data.items || []).map((item: any) => ({
-          userName: item.userName,
-          title: item.title,
-          artist: item.artist,
-          albumArt: item.albumArt,
-          lat: item.loc.coordinates[1],
-          lng: item.loc.coordinates[0],
-          distance: item.distance,
-        }))
+        const mapped: NowItem[] = (data.items || []).map(
+          (item: ApiNowItem) => ({
+            userId: '',
+            userName: item.userName,
+            title: item.title,
+            artist: item.artist,
+            albumArt: item.albumArt,
+            lat: item.loc.coordinates[1],
+            lng: item.loc.coordinates[0],
+            distance: item.distance,
+          }),
+        )
 
         setNowFeed(mapped)
       } catch (err) {
