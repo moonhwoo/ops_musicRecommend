@@ -300,7 +300,7 @@ user_profile의 구조는 대략 다음과 같다:
 
 3. favorite_artists에 있는 가수들의 곡은
    - 각 아티스트당 최대 4곡까지만 넣어라.
-   - 전체 20곡 중 favorite_artists 관련 곡은 최대 12곡까지만 넣어라.
+   - 전체 20곡 중 favorite_artists 관련 곡은 최대 13곡까지만 넣어라.
    - 같은 곡 제목은 절대 두 번 이상 추천하지 마라.
 
 4. preferred_year_category가 특정 시대("1990s", "2000s" 등)라면,
