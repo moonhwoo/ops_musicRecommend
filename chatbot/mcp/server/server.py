@@ -14,6 +14,7 @@ from .model import (
 )
 from .database import save_chat_log, get_recent_chat_logs
 
+
 # =========================
 # Pydantic 스키마 정의
 # =========================
@@ -36,6 +37,7 @@ class AnalyzeResponse(BaseModel):
 
 class RecommendRequest(BaseModel):
     analysis_json: str
+    user_id: Optional[str] = None
 
 
 class Song(BaseModel):
@@ -113,8 +115,14 @@ def analyze_endpoint(req: AnalyzeRequest) -> AnalyzeResponse:
 
 @app.post("/recommend", response_model=RecommendResponse)
 def recommend_endpoint(req: RecommendRequest) -> RecommendResponse:
-    songs = recommend_songs_via_openai_logic(req.analysis_json)
-    songs_with_links = attach_spotify_links_logic(songs, min_valid=4)
+    user_profile = None
+    if req.user_id:
+        user_profile = load_user_profile(req.user_id)
+
+    songs = recommend_songs_via_openai_logic(
+        req.analysis_json, user_profile=user_profile
+    )
+    songs_with_links = attach_spotify_links_logic(songs, min_valid=8)
     return RecommendResponse(
         songs=[
             Song(
@@ -134,6 +142,7 @@ def recommend_endpoint(req: RecommendRequest) -> RecommendResponse:
 
 @app.post("/chat", response_model=ChatResponse)
 def chat_endpoint(req: ChatRequest) -> ChatResponse:
+    print("🔥 /chat user_id =", req.user_id)
     """
     React TextChat에서 사용하기 좋은 통합 채팅 엔드포인트.
     - messages: [{role, content}] 리스트
@@ -152,27 +161,28 @@ def chat_endpoint(req: ChatRequest) -> ChatResponse:
             reply="메시지가 비어 있어요. 지금 기분이나 상황을 한 번 적어줄래요?"
         )
     # 0) user_id를 정수로 변환 (설문 DB의 users.user_id 기준)  # [추가]
-    numeric_user_id: Optional[int] = None  
+    """numeric_user_id: Optional[int] = None  
     if req.user_id:  
         try:  
             numeric_user_id = int(req.user_id)  
         except ValueError:  
-            numeric_user_id = None  
-    
+            numeric_user_id = None   """
+
     # 1) 감정/키워드 분석
     mood_dict, kw_spans, analysis_json, keywords_csv, raw_text = analyze_text_logic(
         user_text
     )
-    
-    # 1-1) 설문 기반 user_profile 로드 (있으면)  # [추가]
-    user_profile = None  
-    if numeric_user_id is not None:  
-        user_profile = load_user_profile(numeric_user_id)
 
+    # 1-1) 설문 기반 user_profile 로드 (있으면)  # [추가]
+    user_profile = None
+    if req.user_id:
+        # req.user_id 는 Spotify user id 문자열
+        user_profile = load_user_profile(req.user_id)
+    print("🔥 loaded user_profile =", user_profile)
     # 2) 추천 + Spotify 링크
     songs = recommend_songs_via_openai_logic(
         analysis_json,
-        user_profile=user_profile,  
+        user_profile=user_profile,
     )
     songs_with_links = attach_spotify_links_logic(songs, min_valid=4)
 
@@ -185,14 +195,18 @@ def chat_endpoint(req: ChatRequest) -> ChatResponse:
             user_text=user_text,
             reply=reply_text,
             user_id=req.user_id,
-            meta={"mood": mood_dict, "keywords_csv": keywords_csv,"user_profile": user_profile,},
+            meta={
+                "mood": mood_dict,
+                "keywords_csv": keywords_csv,
+                "user_profile": user_profile,
+            },
         )
         return ChatResponse(reply=reply_text)
 
     moods_str = ", ".join(f"{k}({v:.2f})" for k, v in mood_dict.items())
     lines: List[str] = []
-    lines.append(f"지금 글에서는 {moods_str} 같은 감정이 느껴져요.")
-    lines.append("이 분위기에 어울리는 곡들을 몇 곡 골라봤어요:\n")
+
+    lines.append("지금 상황에 어울리는 곡들을 몇 곡 골라봤어요:\n")
 
     for s in songs_with_links[:5]:
         title = s.get("title", "")

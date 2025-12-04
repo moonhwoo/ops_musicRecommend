@@ -20,7 +20,8 @@ type ChatApiResponse = {
   songs?: Song[]
 }
 
-const CHAT_API_URL = 'http://127.0.0.1:8000/chat'
+const CHAT_API_URL =
+  (import.meta.env.VITE_CHATBOT_URL || 'http://localhost:8000') + '/chat'
 
 const GREEN = '#15803d'
 
@@ -31,8 +32,21 @@ export default function TextChat() {
   const [songs, setSongs] = useState<Song[]>([])
   const [selectedSongIdx, setSelectedSongIdx] = useState<number | null>(null)
 
+  // ✅ 추가: 로그인 때 저장한 spotify_user_id를 들고 있을 상태
+  const [spotifyUserId, setSpotifyUserId] = useState<string | null>(null)
+
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const nav = useNavigate()
+
+  // ✅ 추가: 마운트 시 localStorage 에서 spotify_user_id 읽기
+  useEffect(() => {
+    const id = localStorage.getItem('spotify_user_id')
+    if (!id) {
+      console.warn('spotify_user_id 없음 → 로그인 페이지로 이동 권장')
+      // 필요하면 여기서 nav('/login') 같은 리다이렉트도 가능
+    }
+    setSpotifyUserId(id)
+  }, [nav])
 
   // 항상 마지막 메시지로 스크롤
   useEffect(() => {
@@ -45,6 +59,19 @@ export default function TextChat() {
     const text = input.trim()
     if (!text || sending) return
 
+    // ✅ 추가: spotify_user_id가 없으면 안내 메시지 띄우고 전송 막기
+    if (!spotifyUserId) {
+      setMsgs((m) => [
+        ...m,
+        {
+          role: 'assistant',
+          content:
+            'Spotify 로그인이 필요합니다. 메인 화면에서 Spotify로 먼저 로그인해 주세요.',
+        },
+      ])
+      return
+    }
+
     setInput('')
 
     const nextMsgs: Msg[] = [...msgs, { role: 'user', content: text }]
@@ -52,7 +79,12 @@ export default function TextChat() {
     setSending(true)
 
     try {
-      const { reply, songs: newSongs } = await getReply(text, nextMsgs)
+      // ✅ 변경: getReply 호출 시 spotifyUserId를 함께 전달
+      const { reply, songs: newSongs } = await getReply(
+        text,
+        nextMsgs,
+        spotifyUserId,
+      )
 
       setMsgs((m) => [...m, { role: 'assistant', content: reply }])
       setSongs(newSongs ?? [])
@@ -101,9 +133,9 @@ export default function TextChat() {
       {/* 상단바 */}
       <header
         style={{
-          borderBottom: '1px solid #27272f',
+          borderBottom: '1px solid #1f2937',
           padding: '12px 16px',
-          background: '#181818',
+          background: '#0b0f13',
           display: 'flex',
           alignItems: 'center',
           gap: 12,
@@ -111,22 +143,24 @@ export default function TextChat() {
       >
         <button
           onClick={goHome}
-          aria-label="메인으로"
-          title="메인으로"
+          aria-label="홈으로"
+          title="홈으로"
           style={{
             padding: '6px 10px',
-            borderRadius: 8,
-            border: '1px solid #374151',
-            background: '#111827',
-            color: '#e5e7eb',
+            borderRadius: 6,
+            border: '1px solid #059669',
+            background: 'transparent',
+            color: '#a7f3d0',
             cursor: 'pointer',
           }}
         >
-          ← 메인으로
+          ← 홈으로
         </button>
-        <b>텍스트 챗봇</b>
-        <span style={{ color: '#9ca3af', marginLeft: 8, fontSize: 12 }}>
-          / 대화는 현재 세션에만 저장됩니다
+        <span style={{ fontSize: 16, fontWeight: 600, color: '#bbf7d0' }}>
+          텍스트 추천
+        </span>
+        <span style={{ color: '#9ca3af', marginLeft: 8, fontSize: 13 }}>
+          대화는 기록에 남지 않아요
         </span>
       </header>
 
@@ -162,10 +196,10 @@ export default function TextChat() {
             }}
           >
             {msgs.length === 0 ? (
-              <div style={{ color: '#9ca3af', marginTop: 8, fontSize: 14 }}>
+              <div style={{ marginTop: 8, fontSize: 14 }}>
                 지금 기분이나 상황을 편하게 적어보면,
                 <br />
-                감정 분석 + 노래 추천을 함께 해줄게요.
+                감정 분석과 함께 노래 추천을 해줄게요.
               </div>
             ) : (
               <div
@@ -352,11 +386,19 @@ export default function TextChat() {
               borderRadius: 8,
               border: '1px solid #374151',
               fontFamily: 'inherit',
-              background: '#020617',
+              background: '#052e16',
               color: '#f9fafb',
               fontSize: 14,
             }}
           />
+          <style>
+            {`
+              textarea::placeholder {
+                color: #ffffff;
+                opacity: 0.8;    // 약간 흐리게
+              }
+            `}
+          </style>
           <button
             onClick={onSend}
             disabled={sending || !input.trim()}
@@ -366,11 +408,11 @@ export default function TextChat() {
               padding: '0 14px',
               borderRadius: 8,
               border: `1px solid ${GREEN}`,
-              background:
-                sending || !input.trim() ? '#052e16' : GREEN,
+              background: GREEN,
               color: '#f9fafb',
               cursor:
                 sending || !input.trim() ? 'not-allowed' : 'pointer',
+              opacity: sending || !input.trim() ? 0.7 : 1,
               fontWeight: 600,
               fontSize: 14,
             }}
@@ -384,11 +426,14 @@ export default function TextChat() {
   )
 }
 
+// ✅ 변경: spotifyUserId를 인자로 추가하고, payload에 user_id로 포함
 async function getReply(
   userText: string,
   history: Msg[],
+  spotifyUserId: string | null,
 ): Promise<ChatApiResponse> {
   const payload = {
+    user_id: spotifyUserId, // 백엔드에서 이 user_id로 유저 프로필/설문 조회 가능
     messages: [
       ...history.map((m) => ({ role: m.role, content: m.content })),
       { role: 'user', content: userText },

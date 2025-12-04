@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import MapView from './MapView'
+import { useNavigate } from "react-router-dom";
+
 
 type Item = {
   trackId: string
@@ -21,9 +23,21 @@ type NowItem = {
   lng: number
 }
 
+// API에서 내려오는 실시간 항목 타입 (loc.coordinates 포함)
+type ApiNowItem = {
+  userName?: string
+  title: string
+  artist: string
+  albumArt?: string
+  loc: { coordinates: [number, number] }
+  distance: number
+}
+
 const GREEN = '#15803d'
 
 export default function Nearby() {
+  const nav = useNavigate();
+
   // Spotify 콜백 파라미터 처리 (혹시 App에서 못 받았을 때 대비)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -98,8 +112,10 @@ export default function Nearby() {
         if (!res.ok) throw new Error('API error')
         const json = await res.json()
         setItems(json.items || [])
-      } catch (e: any) {
-        setErr(e.message)
+      } catch (e: unknown) {
+        // any 대신 unknown + 안전 처리
+        if (e instanceof Error) setErr(e.message)
+        else setErr('API error')
       } finally {
         setLoading(false)
       }
@@ -155,15 +171,18 @@ export default function Nearby() {
         )
         const data = await res.json()
 
-        const mapped = (data.items || []).map((item: any) => ({
-          userName: item.userName,
-          title: item.title,
-          artist: item.artist,
-          albumArt: item.albumArt,
-          lat: item.loc.coordinates[1],
-          lng: item.loc.coordinates[0],
-          distance: item.distance,
-        }))
+        const mapped: NowItem[] = (data.items || []).map(
+          (item: ApiNowItem) => ({
+            userId: '',
+            userName: item.userName,
+            title: item.title,
+            artist: item.artist,
+            albumArt: item.albumArt,
+            lat: item.loc.coordinates[1],
+            lng: item.loc.coordinates[0],
+            distance: item.distance,
+          }),
+        )
 
         setNowFeed(mapped)
       } catch (err) {
@@ -209,6 +228,21 @@ export default function Nearby() {
   const [tab, setTab] = useState<'popular' | 'live'>('popular')
 
   return (
+    <div className="min-h-screen bg-[#121212] text-white">
+
+      {/* 메인으로 돌아가기 + 제목 */}
+      <div className="flex items-center gap-3 border-b border-[#1f2937] px-4 py-3 bg-[#0b0f13]">
+        <button
+          onClick={() => nav('/main')}
+          className="rounded-md border border-emerald-600 px-3 py-1 text-sm text-emerald-300 hover:bg-[#052e16] transition"
+        >
+          ← 홈으로
+        </button>
+        <h2 className="text-base font-semibold text-emerald-200">
+          내 주변 인기곡
+        </h2>
+      </div>
+
     <div
       style={{
         maxWidth: 720,
@@ -249,7 +283,15 @@ export default function Nearby() {
           step={0.01}
           value={radiusKm}
           onChange={(e) => setRadiusKm(parseFloat(e.target.value))}
-          style={{ width: '100%', marginTop: 8 }}
+          style={{
+            width: '100%',
+            marginTop: 8,
+            accentColor: '#22c55e',
+            height: 6,
+            borderRadius: 999,
+            background:
+              'linear-gradient(90deg, #064e3b 0%, #16a34a 50%, #4ade80 100%)',
+            }}
         />
       </div>
 
@@ -300,6 +342,7 @@ export default function Nearby() {
           실시간
         </button>
       </div>
+    </div>
 
       {tab === 'popular' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -493,10 +536,18 @@ export default function Nearby() {
                 onChange={() => setShareOn((v) => !v)}
                 style={{ accentColor: GREEN }}
               />
-              <span>주변 사람들과 지금 듣는 노래 공유하기</span>
+              <span
+                style={{
+                  fontSize: 18,
+                  fontWeight: 600,
+                  color: '#bbf7d0',
+                }}
+              >
+                주변 사람들과 지금 듣는 노래 공유하기
+              </span>
             </label>
-            <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
-              ON 시, 현재 듣는 노래와 위치가 10초마다 업데이트됩니다.
+            <p style={{ fontSize: 12, marginTop: 4 }}>
+              ↑ 체크박스 ON 시, 현재 듣는 노래와 위치가 10초마다 업데이트됩니다.
             </p>
           </div>
 

@@ -27,3 +27,9 @@ Thumbs.db
 frontend/node_modules/
 frontend_2/node_modules/
 node_modules/
+
+
+.cache/
+chatbot/mcp/server/chat.db
+chat.db
+*.db

@@ -1,0 +1,35 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: music-backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "4000:4000"   # 브라우저에서 http://localhost:4000
+    restart: unless-stopped
+
+  chatbot:
+    build:
+      context: ./chatbot
+      dockerfile: dockerfile   # 파일명이 소문자
+    container_name: music-chatbot
+    env_file:
+      - ./chatbot/.env
+    ports:
+      - "8000:8000"   # 브라우저에서 http://localhost:8000
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend_2
+      dockerfile: Dockerfile
+    container_name: music-frontend
+    ports:
+      - "5173:5173"   # http://localhost:5173
+    environment:
+      # 이 부분이 핵심: 브라우저가 localhost 기준으로 API를 때리게 한다
+      - VITE_BACKEND_URL=http://localhost:4000
+      - VITE_CHATBOT_URL=http://localhost:8000
+    restart: unless-stopped
